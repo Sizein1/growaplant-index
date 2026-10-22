@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Index des pets</title>
+<meta name="description" content="Index non officiel des pets de Grow a Plant : nom, rareté et capacités passives.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="wrap">
+  <header class="banner studs">
+    <h1 class="outline">🐾 Index des pets</h1>
+    <p class="sub outline">Grow a Plant · index non officiel · capacités passives de base</p>
+  </header>
+  <nav class="tabs" aria-label="Rubriques">
+    <a class="tab outline" href="./">🌱 Plantes</a>
+    <a class="tab outline" href="pets.html" aria-current="page">🐾 Pets</a>
+  </nav>
+
+  <div class="controls">
+    <div class="row">
+      <input type="search" id="q" placeholder="Rechercher un pet ou une capacité (ex. Money)…" aria-label="Rechercher un pet ou une capacité">
+      <select id="sort" aria-label="Trier">
+        <option value="rarity">Tri : rareté</option>
+        <option value="name">Tri : nom A → Z</option>
+        <option value="powers">Tri : nombre de capacités</option>
+      </select>
+    </div>
+    <div class="chips none-active" id="chips" role="group" aria-label="Filtrer par rareté"></div>
+    <div class="count" id="count"></div>
+  </div>
+
+  <main class="grid" id="grid"></main>
+  <p class="empty outline" id="empty" hidden>Aucun pet ne correspond.</p>
+  <footer class="outline">Données et images tirées du jeu. Site de fan, sans lien avec les créateurs de Grow a Plant.</footer>
+</div>
+
+<script src="pets-data.js"></script>
+<script>
+  const RARITIES = [
+    ["Common", "#9aa0a8"], ["Uncommon", "#38b84c"], ["Rare", "#2f8ff0"], ["Epic", "#a24df0"],
+    ["Legendary", "#f0b020"], ["Mythic", "#f0405f"], ["SECRET", "#24252b"], ["VOID", "#5b2fd6"],
+    ["EXCLUSIVE", "#ff7a1a"], ["CELESTIAL", "#22b8cf"],
+  ];
+  const ORDER = Object.fromEntries(RARITIES.map(([r], i) => [r, i]));
+  const COLOR = Object.fromEntries(RARITIES);
+  const pets = window.PETS || [];
+  const active = new Set();
+
+  // Boutons de rareté avec le nombre de pets
+  const chips = document.getElementById("chips");
+  for (const [r, c] of RARITIES) {
+    const n = pets.filter((p) => p.rarity === r).length;
+    if (!n) continue;
+    const b = document.createElement("button");
+    b.className = "chip outline"; b.type = "button"; b.dataset.r = r; b.style.setProperty("--c", c);
+    b.setAttribute("aria-pressed", "false");
+    b.innerHTML = `${r}<span class="n">${n}</span>`;
+    b.onclick = () => {
+      active.has(r) ? active.delete(r) : active.add(r);
+      b.setAttribute("aria-pressed", String(active.has(r)));
+      chips.classList.toggle("none-active", active.size === 0);
+      render();
+    };
+    chips.appendChild(b);
+  }
+
+  const grid = document.getElementById("grid");
+  const q = document.getElementById("q");
+  const sort = document.getElementById("sort");
+  q.oninput = sort.onchange = render;
+
+  function render() {
+    const term = q.value.trim().toLowerCase();
+    // La recherche porte sur le nom ET les capacités ("money" trouve tous les pets qui boostent l'argent)
+    const list = pets.filter((p) => (!active.size || active.has(p.rarity)) &&
+      (!term || p.name.toLowerCase().includes(term) || p.powers.some((pw) => pw.toLowerCase().includes(term))));
+    const by = {
+      "rarity": (a, b) => (ORDER[a.rarity] ?? 99) - (ORDER[b.rarity] ?? 99) || a.name.localeCompare(b.name, "fr"),
+      "name": (a, b) => a.name.localeCompare(b.name, "fr"),
+      "powers": (a, b) => b.powers.length - a.powers.length || (ORDER[b.rarity] ?? 99) - (ORDER[a.rarity] ?? 99),
+    }[sort.value];
+    list.sort(by);
+
+    grid.replaceChildren(...list.map((p) => {
+      const el = document.createElement("article");
+      el.className = "card";
+      el.innerHTML = `
+        <div class="pic">
+          <img loading="lazy" width="360" height="360">
+          <span class="badge outline" data-r="${p.rarity}" style="--c:${COLOR[p.rarity] || "#777"}">${p.rarity}</span>
+        </div>
+        <div class="info">
+          <span class="name outline"></span>
+          <ul class="powers"></ul>
+          <div class="tags"></div>
+        </div>`;
+      const img = el.querySelector("img");
+      img.src = `images/pets/${p.id}.jpg`; img.alt = p.name;
+      el.querySelector(".name").textContent = p.name;
+      const ul = el.querySelector(".powers");
+      for (const pw of p.powers.length ? p.powers : ["Aucune capacité passive"]) {
+        const li = document.createElement("li");
+        li.textContent = pw;
+        if (!p.powers.length) li.className = "none";
+        ul.appendChild(li);
+      }
+      const tags = el.querySelector(".tags");
+      for (const [flag, cls, label] of [[p.event, "event", "Événement"], [p.flying, "fly", "Volant"], [p.noTrade, "notrade", "Non échangeable"]]) {
+        if (!flag) continue;
+        const t = document.createElement("span");
+        t.className = `tag outline ${cls}`; t.textContent = label;
+        tags.appendChild(t);
+      }
+      return el;
+    }));
+    document.getElementById("count").textContent = `${list.length} pet${list.length > 1 ? "s" : ""} sur ${pets.length}`;
+    document.getElementById("empty").hidden = list.length > 0;
+  }
+  render();
+</script>
+</body>
+</html>
