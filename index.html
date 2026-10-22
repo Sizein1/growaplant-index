@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Index des plantes</title>
+<meta name="description" content="Index non officiel des plantes de Grow a Plant : nom, rareté, gain par seconde et temps de pousse.">
+<style>
+  :root {
+    --bg: #f4f5f7; --surface: #ffffff; --text: #16181d; --muted: #5d6470; --border: #dfe2e7;
+    --accent: #2f7d46; --chip: #eceef2; --img-bg: #1e1e24;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #111216; --surface: #1b1d23; --text: #eceef2; --muted: #9aa1ad; --border: #2c2f37;
+      --accent: #5cc77c; --chip: #262932; --img-bg: #1e1e24;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #111216; --surface: #1b1d23; --text: #eceef2; --muted: #9aa1ad; --border: #2c2f37;
+    --accent: #5cc77c; --chip: #262932; --img-bg: #1e1e24;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  header, main { max-width: 1200px; margin: 0 auto; padding: 0 16px; }
+  header { padding-top: 28px; }
+  h1 { margin: 0; font-size: 28px; letter-spacing: -0.01em; }
+  .sub { margin: 4px 0 0; color: var(--muted); }
+
+  .controls { position: sticky; top: 0; z-index: 5; background: var(--bg); padding: 16px 0 12px; display: grid; gap: 10px; }
+  .row { display: flex; gap: 10px; flex-wrap: wrap; }
+  input[type="search"], select {
+    font: inherit; color: var(--text); background: var(--surface); border: 1px solid var(--border);
+    border-radius: 10px; padding: 9px 12px; min-height: 40px;
+  }
+  input[type="search"] { flex: 1 1 240px; }
+  .chips { display: flex; gap: 6px; flex-wrap: wrap; }
+  .chip {
+    font: inherit; font-size: 13px; cursor: pointer; border: 1px solid var(--border); background: var(--chip); color: var(--text);
+    border-radius: 999px; padding: 5px 11px; display: inline-flex; gap: 6px; align-items: center;
+  }
+  .chip .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--c); }
+  .chip .n { color: var(--muted); font-variant-numeric: tabular-nums; }
+  .chip[aria-pressed="true"] { border-color: var(--c); box-shadow: inset 0 0 0 1px var(--c); background: var(--surface); }
+  .count { color: var(--muted); font-size: 13px; }
+
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; padding-bottom: 40px; }
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; overflow: hidden; display: flex; flex-direction: column; }
+  .card img { display: block; width: 100%; aspect-ratio: 1; object-fit: cover; background: var(--img-bg); }
+  .info { padding: 10px 12px 12px; display: grid; gap: 4px; }
+  .name { font-weight: 650; line-height: 1.25; }
+  .badge { justify-self: start; font-size: 11px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: #fff; background: var(--c); border-radius: 6px; padding: 2px 7px; }
+  .stats { display: flex; justify-content: space-between; gap: 8px; font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .income { color: var(--accent); font-weight: 650; }
+  .empty { text-align: center; color: var(--muted); padding: 60px 0; }
+  footer { max-width: 1200px; margin: 0 auto; padding: 0 16px 28px; color: var(--muted); font-size: 12px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Index des plantes</h1>
+  <p class="sub">Grow a Plant · index non officiel · gains de base, sans bonus ni mutation</p>
+</header>
+<main>
+  <div class="controls">
+    <div class="row">
+      <input type="search" id="q" placeholder="Rechercher une plante…" aria-label="Rechercher une plante">
+      <select id="sort" aria-label="Trier">
+        <option value="rarity">Tri : rareté</option>
+        <option value="income-desc">Tri : gain/s décroissant</option>
+        <option value="income-asc">Tri : gain/s croissant</option>
+        <option value="name">Tri : nom A → Z</option>
+        <option value="grow">Tri : temps de pousse</option>
+      </select>
+    </div>
+    <div class="chips" id="chips" role="group" aria-label="Filtrer par rareté"></div>
+    <div class="count" id="count"></div>
+  </div>
+  <div class="grid" id="grid"></div>
+  <p class="empty" id="empty" hidden>Aucune plante ne correspond.</p>
+</main>
+<footer>Données et images tirées du jeu. Site de fan, sans lien avec les créateurs de Grow a Plant.</footer>
+
+<script src="data.js"></script>
+<script>
+  const RARITIES = [
+    ["Common", "#8a9099"], ["Uncommon", "#3fa65a"], ["Rare", "#3b82e0"], ["Epic", "#9b51e0"],
+    ["Legendary", "#e0a020"], ["Mythic", "#e04a6a"], ["SECRET", "#3a3d45"], ["VOID", "#5b3cc4"],
+    ["EXCLUSIVE", "#e0702a"], ["CELESTIAL", "#22b8cf"],
+  ];
+  const ORDER = Object.fromEntries(RARITIES.map(([r], i) => [r, i]));
+  const COLOR = Object.fromEntries(RARITIES);
+  const plants = window.PLANTS || [];
+  const active = new Set();
+
+  const money = (n) => {
+    const units = [[1e12, "T"], [1e9, "B"], [1e6, "M"], [1e3, "K"]];
+    for (const [v, u] of units) if (n >= v) return "$" + (n / v).toFixed(n / v < 10 ? 1 : 0).replace(/\.0$/, "") + u;
+    return "$" + n;
+  };
+  const duration = (s) => {
+    if (s < 60) return s + " s";
+    if (s < 3600) return Math.round(s / 60) + " min";
+    const h = Math.floor(s / 3600), m = Math.round((s % 3600) / 60);
+    return m ? `${h} h ${m}` : `${h} h`;
+  };
+
+  // Puces de rareté avec le nombre de plantes
+  const chips = document.getElementById("chips");
+  for (const [r, c] of RARITIES) {
+    const n = plants.filter((p) => p.rarity === r).length;
+    if (!n) continue;
+    const b = document.createElement("button");
+    b.className = "chip"; b.type = "button"; b.style.setProperty("--c", c);
+    b.setAttribute("aria-pressed", "false");
+    b.innerHTML = `<span class="dot"></span>${r}<span class="n">${n}</span>`;
+    b.onclick = () => {
+      active.has(r) ? active.delete(r) : active.add(r);
+      b.setAttribute("aria-pressed", String(active.has(r)));
+      render();
+    };
+    chips.appendChild(b);
+  }
+
+  const grid = document.getElementById("grid");
+  const q = document.getElementById("q");
+  const sort = document.getElementById("sort");
+  q.oninput = sort.onchange = render;
+
+  function render() {
+    const term = q.value.trim().toLowerCase();
+    let list = plants.filter((p) => (!active.size || active.has(p.rarity)) && (!term || p.name.toLowerCase().includes(term)));
+    const by = {
+      "rarity": (a, b) => (ORDER[a.rarity] ?? 99) - (ORDER[b.rarity] ?? 99) || a.income - b.income,
+      "income-desc": (a, b) => b.income - a.income,
+      "income-asc": (a, b) => a.income - b.income,
+      "name": (a, b) => a.name.localeCompare(b.name, "fr"),
+      "grow": (a, b) => a.grow - b.grow,
+    }[sort.value];
+    list.sort(by);
+
+    grid.replaceChildren(...list.map((p) => {
+      const c = COLOR[p.rarity] || "#777";
+      const el = document.createElement("article");
+      el.className = "card";
+      el.innerHTML = `
+        <img src="images/${p.id}.jpg" alt="${p.name}" loading="lazy" width="360" height="360">
+        <div class="info">
+          <span class="badge" style="--c:${c}">${p.rarity}</span>
+          <span class="name"></span>
+          <div class="stats"><span class="income">${money(p.income)}/s</span><span title="Temps de pousse">⏱ ${duration(p.grow)}</span></div>
+        </div>`;
+      el.querySelector(".name").textContent = p.name;
+      return el;
+    }));
+    document.getElementById("count").textContent = `${list.length} plante${list.length > 1 ? "s" : ""} sur ${plants.length}`;
+    document.getElementById("empty").hidden = list.length > 0;
+  }
+  render();
+</script>
+</body>
+</html>

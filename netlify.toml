@@ -1,0 +1,9 @@
+# Site statique : rien à compiler, Netlify publie directement le contenu du dépôt
+[build]
+  publish = "."
+
+# Les images changent rarement : le navigateur les garde en cache une semaine
+[[headers]]
+  for = "/images/*"
+  [headers.values]
+    Cache-Control = "public, max-age=604800"
