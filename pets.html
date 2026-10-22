@@ -22,6 +22,15 @@
     <button class="tab lang outline" type="button" id="lang" data-i18n="lang.switch">🇬🇧 English</button>
   </nav>
 
+  <details class="duos" id="duos">
+    <summary class="outline" data-i18n="duo.title">🏆 Meilleurs duos par capacité</summary>
+    <div class="duos-body">
+      <p class="duos-hint" data-i18n="duo.hint"></p>
+      <div class="removed" id="removed" hidden></div>
+      <div class="duo-grid" id="duoGrid"></div>
+    </div>
+  </details>
+
   <div class="controls">
     <div class="row">
       <input type="search" id="q" placeholder="Rechercher un pet ou une capacité (ex. Money)…" aria-label="Rechercher un pet ou une capacité" data-i18n-placeholder="pets.search" data-i18n-aria="pets.search">
@@ -123,8 +132,97 @@
     document.getElementById("count").textContent = t("pets.count", { n: list.length, s: list.length > 1 ? "s" : "", total: pets.length });
     document.getElementById("empty").hidden = list.length > 0;
   }
-  window.onLangChange = render; // le bouton de langue réaffiche les cartes
+  // ---------- Meilleurs duos par capacité ----------
+  // Lit la valeur dans le texte de la capacité : "x1.25 Grow Speed", "+6% Pack Luck", "-30% Tricky Visitors",
+  // "+x3 Watering", "+2h Boost Money Offline"... Pour chaque capacité, plus le chiffre est grand, mieux c'est.
+  const parsePower = (text) => {
+    const m = text.match(/^[+\-]?x?(\d+(?:\.\d+)?)(?:%|h)?\s+(.+)$/);
+    return m ? { value: parseFloat(m[1]), label: m[2], text } : null;
+  };
+
+  // label -> pets classés du meilleur au moins bon (à égalité : le plus rare d'abord)
+  const abilities = new Map();
+  for (const p of pets) {
+    for (const text of p.powers) {
+      const pw = parsePower(text);
+      if (!pw) continue;
+      if (!abilities.has(pw.label)) abilities.set(pw.label, []);
+      abilities.get(pw.label).push({ pet: p, value: pw.value, text });
+    }
+  }
+  for (const list of abilities.values()) {
+    list.sort((a, b) => b.value - a.value || (ORDER[b.pet.rarity] ?? 0) - (ORDER[a.pet.rarity] ?? 0));
+  }
+  // Les capacités les plus répandues en premier
+  const abilityOrder = [...abilities.keys()].sort((a, b) => abilities.get(b).length - abilities.get(a).length || a.localeCompare(b));
+
+  // Pets que tu n'as pas : retirés de tous les duos, mémorisés dans le navigateur
+  let notOwned = new Set();
+  try { notOwned = new Set(JSON.parse(localStorage.getItem("petsNotOwned") || "[]")); } catch (e) { /* pas de stockage : liste vide */ }
+  const saveNotOwned = () => { try { localStorage.setItem("petsNotOwned", JSON.stringify([...notOwned])); } catch (e) { /* ignoré */ } };
+
+  const duoGrid = document.getElementById("duoGrid");
+  const removedBox = document.getElementById("removed");
+
+  function renderDuos() {
+    duoGrid.replaceChildren(...abilityOrder.map((label) => {
+      const all = abilities.get(label);
+      const best = all.filter((e) => !notOwned.has(e.pet.id)).slice(0, 2);
+      const box = document.createElement("section");
+      box.className = "duo";
+      const h = document.createElement("h3");
+      h.className = "outline"; h.textContent = label;
+      const meta = document.createElement("div");
+      meta.className = "meta";
+      meta.textContent = t("duo.count", { n: all.length, s: all.length > 1 ? "s" : "" });
+      box.append(h, meta);
+      for (let i = 0; i < 2; i++) {
+        const e = best[i];
+        if (!e) {
+          const slot = document.createElement("div");
+          slot.className = "empty-slot"; slot.textContent = t("duo.none");
+          box.appendChild(slot);
+          continue;
+        }
+        const row = document.createElement("div");
+        row.className = "duo-pet";
+        row.innerHTML = `
+          <img loading="lazy" width="48" height="48" alt="">
+          <div class="who"><b></b><span class="val"></span><span class="rk outline" style="--c:${COLOR[e.pet.rarity] || "#777"}">${e.pet.rarity}</span></div>
+          <button class="x" type="button">✕</button>`;
+        row.querySelector("img").src = `images/pets/${e.pet.id}.jpg`;
+        row.querySelector("b").textContent = e.pet.name;
+        row.querySelector(".val").textContent = e.text;
+        const x = row.querySelector(".x");
+        x.title = t("duo.remove"); x.setAttribute("aria-label", `${t("duo.remove")} : ${e.pet.name}`);
+        x.onclick = () => { notOwned.add(e.pet.id); saveNotOwned(); renderDuos(); };
+        box.appendChild(row);
+      }
+      return box;
+    }));
+
+    // Liste des pets retirés, chacun avec un bouton pour le remettre
+    removedBox.hidden = notOwned.size === 0;
+    if (!notOwned.size) { removedBox.replaceChildren(); return; }
+    const label = document.createElement("span");
+    label.textContent = t("duo.removed");
+    const buttons = [...notOwned].map((id) => {
+      const pet = pets.find((p) => p.id === id);
+      const b = document.createElement("button");
+      b.type = "button"; b.textContent = `↩ ${pet ? pet.name : id}`;
+      b.setAttribute("aria-label", t("duo.restore", { name: pet ? pet.name : id }));
+      b.onclick = () => { notOwned.delete(id); saveNotOwned(); renderDuos(); };
+      return b;
+    });
+    const reset = document.createElement("button");
+    reset.type = "button"; reset.className = "reset"; reset.textContent = t("duo.reset");
+    reset.onclick = () => { notOwned.clear(); saveNotOwned(); renderDuos(); };
+    removedBox.replaceChildren(label, ...buttons, reset);
+  }
+
+  window.onLangChange = () => { render(); renderDuos(); }; // le bouton de langue réaffiche tout
   render();
+  renderDuos();
 </script>
 </body>
 </html>
