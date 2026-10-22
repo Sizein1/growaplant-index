@@ -5,63 +5,133 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Index des plantes</title>
 <meta name="description" content="Index non officiel des plantes de Grow a Plant : nom, rareté, gain par seconde et temps de pousse.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&display=swap" rel="stylesheet">
 <style>
+  /* Style des interfaces Roblox : briques à picots, contours noirs épais, boutons en relief */
   :root {
-    --bg: #f4f5f7; --surface: #ffffff; --text: #16181d; --muted: #5d6470; --border: #dfe2e7;
-    --accent: #2f7d46; --chip: #eceef2; --img-bg: #1e1e24;
-  }
-  @media (prefers-color-scheme: dark) {
-    :root:not([data-theme="light"]) {
-      --bg: #111216; --surface: #1b1d23; --text: #eceef2; --muted: #9aa1ad; --border: #2c2f37;
-      --accent: #5cc77c; --chip: #262932; --img-bg: #1e1e24;
-    }
-  }
-  :root[data-theme="dark"] {
-    --bg: #111216; --surface: #1b1d23; --text: #eceef2; --muted: #9aa1ad; --border: #2c2f37;
-    --accent: #5cc77c; --chip: #262932; --img-bg: #1e1e24;
+    --ink: #0d0d10;            /* contours et ombres */
+    --sky-top: #5cc6ff; --sky-bottom: #a9e4ff;
+    --grass: #4fc14a; --grass-dark: #2f8f2c;
+    --panel: #2b2d36; --panel-light: #3a3d49; --card-img: #1e1e24;
+    --text: #ffffff; --muted: #c9cdd8;
+    --money: #6dff52;
+    --field: #ffffff; --field-text: #1d1f26;
+    --stroke: 2px;
   }
   * { box-sizing: border-box; }
-  body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
-  header, main { max-width: 1200px; margin: 0 auto; padding: 0 16px; }
-  header { padding-top: 28px; }
-  h1 { margin: 0; font-size: 28px; letter-spacing: -0.01em; }
-  .sub { margin: 4px 0 0; color: var(--muted); }
+  body {
+    margin: 0; color: var(--text);
+    font: 600 15px/1.35 "Fredoka", "Trebuchet MS", system-ui, sans-serif;
+    background: linear-gradient(var(--sky-top), var(--sky-bottom) 420px, var(--sky-bottom)) fixed;
+    min-height: 100vh;
+  }
+  .wrap { max-width: 1200px; margin: 0 auto; padding: 0 16px; }
 
-  .controls { position: sticky; top: 0; z-index: 5; background: var(--bg); padding: 16px 0 12px; display: grid; gap: 10px; }
+  /* Texte blanc contour noir, comme les titres du jeu */
+  .outline {
+    color: #fff;
+    text-shadow:
+      calc(var(--stroke) * -1) calc(var(--stroke) * -1) 0 var(--ink), var(--stroke) calc(var(--stroke) * -1) 0 var(--ink),
+      calc(var(--stroke) * -1) var(--stroke) 0 var(--ink), var(--stroke) var(--stroke) 0 var(--ink),
+      0 calc(var(--stroke) * -1) 0 var(--ink), 0 var(--stroke) 0 var(--ink),
+      calc(var(--stroke) * -1) 0 0 var(--ink), var(--stroke) 0 0 var(--ink),
+      0 calc(var(--stroke) + 2px) 0 var(--ink);
+  }
+
+  /* Brique à picots (studs) */
+  .studs {
+    background-image:
+      radial-gradient(circle at 50% 45%, rgba(255,255,255,.22) 0 5px, rgba(0,0,0,.18) 6px 7px, transparent 8px);
+    background-size: 24px 24px;
+  }
+
+  /* En-tête : panneau vert comme le "Seed Shop" */
+  .banner {
+    margin: 24px 0 0; border: 4px solid var(--ink); border-radius: 18px;
+    background-color: var(--grass); box-shadow: 0 6px 0 var(--ink);
+    padding: 16px 20px 18px; position: relative; overflow: hidden;
+  }
+  .banner::after { content: ""; position: absolute; inset: auto 0 0 0; height: 10px; background: var(--grass-dark); }
+  h1 { margin: 0; font-size: clamp(34px, 7vw, 56px); line-height: 1.05; font-weight: 700; --stroke: 4px; letter-spacing: 0.5px; }
+  .sub { margin: 6px 0 0; font-size: 15px; --stroke: 2px; }
+
+  /* Barre de recherche, filtres, tri : collée en haut au défilement */
+  .controls {
+    position: sticky; top: 0; z-index: 5; margin: 16px 0;
+    background: var(--panel); border: 4px solid var(--ink); border-radius: 16px; box-shadow: 0 5px 0 var(--ink);
+    padding: 12px; display: grid; gap: 10px;
+  }
   .row { display: flex; gap: 10px; flex-wrap: wrap; }
   input[type="search"], select {
-    font: inherit; color: var(--text); background: var(--surface); border: 1px solid var(--border);
-    border-radius: 10px; padding: 9px 12px; min-height: 40px;
+    font: 600 15px "Fredoka", system-ui, sans-serif; color: var(--field-text); background: var(--field);
+    border: 3px solid var(--ink); border-radius: 12px; padding: 8px 12px; min-height: 44px;
+    box-shadow: inset 0 -4px 0 #d6d9e0;
   }
   input[type="search"] { flex: 1 1 240px; }
-  .chips { display: flex; gap: 6px; flex-wrap: wrap; }
-  .chip {
-    font: inherit; font-size: 13px; cursor: pointer; border: 1px solid var(--border); background: var(--chip); color: var(--text);
-    border-radius: 999px; padding: 5px 11px; display: inline-flex; gap: 6px; align-items: center;
-  }
-  .chip .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--c); }
-  .chip .n { color: var(--muted); font-variant-numeric: tabular-nums; }
-  .chip[aria-pressed="true"] { border-color: var(--c); box-shadow: inset 0 0 0 1px var(--c); background: var(--surface); }
-  .count { color: var(--muted); font-size: 13px; }
+  input[type="search"]:focus, select:focus, .chip:focus-visible { outline: 3px solid #ffd43b; outline-offset: 2px; }
+  select { cursor: pointer; }
 
-  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; padding-bottom: 40px; }
-  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; overflow: hidden; display: flex; flex-direction: column; }
-  .card img { display: block; width: 100%; aspect-ratio: 1; object-fit: cover; background: var(--img-bg); }
-  .info { padding: 10px 12px 12px; display: grid; gap: 4px; }
-  .name { font-weight: 650; line-height: 1.25; }
-  .badge { justify-self: start; font-size: 11px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: #fff; background: var(--c); border-radius: 6px; padding: 2px 7px; }
-  .stats { display: flex; justify-content: space-between; gap: 8px; font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
-  .income { color: var(--accent); font-weight: 650; }
-  .empty { text-align: center; color: var(--muted); padding: 60px 0; }
-  footer { max-width: 1200px; margin: 0 auto; padding: 0 16px 28px; color: var(--muted); font-size: 12px; }
+  .chips { display: flex; gap: 8px; flex-wrap: wrap; }
+  .chip {
+    font: 700 13px "Fredoka", system-ui, sans-serif; letter-spacing: 0.3px; cursor: pointer;
+    color: #fff; background: var(--c); border: 3px solid var(--ink); border-radius: 10px;
+    padding: 4px 10px 5px; box-shadow: 0 4px 0 var(--ink); transform: translateY(0);
+    display: inline-flex; gap: 6px; align-items: center; opacity: .55; transition: transform .06s, box-shadow .06s, opacity .1s;
+    --stroke: 1.5px;
+  }
+  .chip .n { background: rgba(0,0,0,.35); border-radius: 6px; padding: 0 6px; font-variant-numeric: tabular-nums; }
+  .chip:hover { opacity: .85; }
+  .chip[aria-pressed="true"] { opacity: 1; transform: translateY(3px); box-shadow: 0 1px 0 var(--ink); }
+  .chips.none-active .chip { opacity: 1; } /* aucun filtre = tout est affiché, tous les boutons pleins */
+  .count { font-size: 14px; color: var(--muted); }
+
+  /* Cartes : panneau sombre, bord noir épais, comme les cartes du shop */
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 14px; padding-bottom: 40px; }
+  .card {
+    background: var(--panel); border: 4px solid var(--ink); border-radius: 16px; overflow: hidden;
+    box-shadow: 0 5px 0 var(--ink); display: flex; flex-direction: column; transition: transform .1s;
+  }
+  .card:hover { transform: translateY(-3px); }
+  .pic { position: relative; background: var(--card-img); border-bottom: 4px solid var(--ink); }
+  .pic img { display: block; width: 100%; height: auto; aspect-ratio: 1; object-fit: cover; } /* height:auto, sinon l'attribut height="360" étire l'image */
+  .badge {
+    position: absolute; left: 8px; top: 8px; font-weight: 700; font-size: 12px; letter-spacing: 0.5px; text-transform: uppercase;
+    background-color: var(--c); border: 3px solid var(--ink); border-radius: 9px; padding: 1px 8px 2px; --stroke: 1.5px;
+  }
+  .info { padding: 8px 10px 10px; display: grid; gap: 2px; }
+  .name { font-size: 17px; font-weight: 700; line-height: 1.15; --stroke: 2px; }
+  .stats { display: flex; justify-content: space-between; align-items: baseline; gap: 6px; font-variant-numeric: tabular-nums; }
+  .income { color: var(--money); font-size: 19px; font-weight: 700; --stroke: 2px; }
+  .income { text-shadow: -2px -2px 0 var(--ink), 2px -2px 0 var(--ink), -2px 2px 0 var(--ink), 2px 2px 0 var(--ink), 0 -2px 0 var(--ink), 0 2px 0 var(--ink), -2px 0 0 var(--ink), 2px 0 0 var(--ink), 0 4px 0 var(--ink); }
+  .grow { font-size: 13px; color: var(--muted); white-space: nowrap; }
+  .empty { text-align: center; padding: 50px 0; font-size: 20px; --stroke: 2px; }
+  footer { padding: 0 0 28px; font-size: 13px; --stroke: 1.5px; }
+
+  /* Couleurs des raretés, avec effets pour les plus rares */
+  [data-r="SECRET"] { --c: #24252b; }
+  [data-r="VOID"] { --c: #5b2fd6; }
+  .badge[data-r="VOID"], .chip[data-r="VOID"] { background-image: linear-gradient(135deg, #3a1d9e, #7a4dff 55%, #3a1d9e); }
+  .badge[data-r="EXCLUSIVE"], .chip[data-r="EXCLUSIVE"] { background-image: linear-gradient(90deg, #ff4d4d, #ff9f1a, #ffe14d, #4dff7a, #4dc3ff, #b44dff); }
+  .badge[data-r="CELESTIAL"], .chip[data-r="CELESTIAL"] { background-image: linear-gradient(135deg, #7ff0ff, #22b8cf 50%, #ffffff); }
+  .badge[data-r="SECRET"], .chip[data-r="SECRET"] { background-image: repeating-linear-gradient(90deg, #24252b 0 10px, #3a3c45 10px 20px); }
+
+  @media (max-width: 480px) {
+    .grid { grid-template-columns: repeat(2, 1fr); gap: 10px; }
+    .name { font-size: 15px; } .income { font-size: 16px; }
+    .banner { padding: 12px 14px 16px; }
+    .controls { position: static; } /* trop haut sur téléphone pour rester collé en haut : il masquerait les plantes */
+  }
 </style>
 </head>
 <body>
-<header>
-  <h1>Index des plantes</h1>
-  <p class="sub">Grow a Plant · index non officiel · gains de base, sans bonus ni mutation</p>
-</header>
-<main>
+<div class="wrap">
+  <header class="banner studs">
+    <h1 class="outline">🌱 Index des plantes</h1>
+    <p class="sub outline">Grow a Plant · index non officiel · gains de base, sans bonus ni mutation</p>
+  </header>
+
   <div class="controls">
     <div class="row">
       <input type="search" id="q" placeholder="Rechercher une plante…" aria-label="Rechercher une plante">
@@ -73,20 +143,21 @@
         <option value="grow">Tri : temps de pousse</option>
       </select>
     </div>
-    <div class="chips" id="chips" role="group" aria-label="Filtrer par rareté"></div>
+    <div class="chips none-active" id="chips" role="group" aria-label="Filtrer par rareté"></div>
     <div class="count" id="count"></div>
   </div>
-  <div class="grid" id="grid"></div>
-  <p class="empty" id="empty" hidden>Aucune plante ne correspond.</p>
-</main>
-<footer>Données et images tirées du jeu. Site de fan, sans lien avec les créateurs de Grow a Plant.</footer>
+
+  <main class="grid" id="grid"></main>
+  <p class="empty outline" id="empty" hidden>Aucune plante ne correspond.</p>
+  <footer class="outline">Données et images tirées du jeu. Site de fan, sans lien avec les créateurs de Grow a Plant.</footer>
+</div>
 
 <script src="data.js"></script>
 <script>
   const RARITIES = [
-    ["Common", "#8a9099"], ["Uncommon", "#3fa65a"], ["Rare", "#3b82e0"], ["Epic", "#9b51e0"],
-    ["Legendary", "#e0a020"], ["Mythic", "#e04a6a"], ["SECRET", "#3a3d45"], ["VOID", "#5b3cc4"],
-    ["EXCLUSIVE", "#e0702a"], ["CELESTIAL", "#22b8cf"],
+    ["Common", "#9aa0a8"], ["Uncommon", "#38b84c"], ["Rare", "#2f8ff0"], ["Epic", "#a24df0"],
+    ["Legendary", "#f0b020"], ["Mythic", "#f0405f"], ["SECRET", "#24252b"], ["VOID", "#5b2fd6"],
+    ["EXCLUSIVE", "#ff7a1a"], ["CELESTIAL", "#22b8cf"],
   ];
   const ORDER = Object.fromEntries(RARITIES.map(([r], i) => [r, i]));
   const COLOR = Object.fromEntries(RARITIES);
@@ -105,18 +176,19 @@
     return m ? `${h} h ${m}` : `${h} h`;
   };
 
-  // Puces de rareté avec le nombre de plantes
+  // Boutons de rareté avec le nombre de plantes
   const chips = document.getElementById("chips");
   for (const [r, c] of RARITIES) {
     const n = plants.filter((p) => p.rarity === r).length;
     if (!n) continue;
     const b = document.createElement("button");
-    b.className = "chip"; b.type = "button"; b.style.setProperty("--c", c);
+    b.className = "chip outline"; b.type = "button"; b.dataset.r = r; b.style.setProperty("--c", c);
     b.setAttribute("aria-pressed", "false");
-    b.innerHTML = `<span class="dot"></span>${r}<span class="n">${n}</span>`;
+    b.innerHTML = `${r}<span class="n">${n}</span>`;
     b.onclick = () => {
       active.has(r) ? active.delete(r) : active.add(r);
       b.setAttribute("aria-pressed", String(active.has(r)));
+      chips.classList.toggle("none-active", active.size === 0);
       render();
     };
     chips.appendChild(b);
@@ -129,7 +201,7 @@
 
   function render() {
     const term = q.value.trim().toLowerCase();
-    let list = plants.filter((p) => (!active.size || active.has(p.rarity)) && (!term || p.name.toLowerCase().includes(term)));
+    const list = plants.filter((p) => (!active.size || active.has(p.rarity)) && (!term || p.name.toLowerCase().includes(term)));
     const by = {
       "rarity": (a, b) => (ORDER[a.rarity] ?? 99) - (ORDER[b.rarity] ?? 99) || a.income - b.income,
       "income-desc": (a, b) => b.income - a.income,
@@ -140,16 +212,19 @@
     list.sort(by);
 
     grid.replaceChildren(...list.map((p) => {
-      const c = COLOR[p.rarity] || "#777";
       const el = document.createElement("article");
       el.className = "card";
       el.innerHTML = `
-        <img src="images/${p.id}.jpg" alt="${p.name}" loading="lazy" width="360" height="360">
+        <div class="pic">
+          <img loading="lazy" width="360" height="360">
+          <span class="badge outline" data-r="${p.rarity}" style="--c:${COLOR[p.rarity] || "#777"}">${p.rarity}</span>
+        </div>
         <div class="info">
-          <span class="badge" style="--c:${c}">${p.rarity}</span>
-          <span class="name"></span>
-          <div class="stats"><span class="income">${money(p.income)}/s</span><span title="Temps de pousse">⏱ ${duration(p.grow)}</span></div>
+          <span class="name outline"></span>
+          <div class="stats"><span class="income">${money(p.income)}/s</span><span class="grow" title="Temps de pousse">⏱ ${duration(p.grow)}</span></div>
         </div>`;
+      const img = el.querySelector("img");
+      img.src = `images/${p.id}.jpg`; img.alt = p.name;
       el.querySelector(".name").textContent = p.name;
       return el;
     }));
