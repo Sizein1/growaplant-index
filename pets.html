@@ -10,35 +10,37 @@
 <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css">
 </head>
-<body>
+<body data-title="pets.title">
 <div class="wrap">
   <header class="banner studs">
-    <h1 class="outline">🐾 Index des pets</h1>
-    <p class="sub outline">Grow a Plant · index non officiel · capacités passives de base</p>
+    <h1 class="outline" data-i18n="pets.title">🐾 Index des pets</h1>
+    <p class="sub outline" data-i18n="pets.sub">Grow a Plant · index non officiel · capacités passives de base</p>
   </header>
-  <nav class="tabs" aria-label="Rubriques">
-    <a class="tab outline" href="./">🌱 Plantes</a>
-    <a class="tab outline" href="pets.html" aria-current="page">🐾 Pets</a>
+  <nav class="tabs" aria-label="Rubriques" data-i18n-aria="nav.label">
+    <a class="tab outline" href="./" data-i18n="nav.plants">🌱 Plantes</a>
+    <a class="tab outline" href="pets.html" aria-current="page" data-i18n="nav.pets">🐾 Pets</a>
+    <button class="tab lang outline" type="button" id="lang" data-i18n="lang.switch">🇬🇧 English</button>
   </nav>
 
   <div class="controls">
     <div class="row">
-      <input type="search" id="q" placeholder="Rechercher un pet ou une capacité (ex. Money)…" aria-label="Rechercher un pet ou une capacité">
-      <select id="sort" aria-label="Trier">
-        <option value="rarity">Tri : rareté</option>
-        <option value="name">Tri : nom A → Z</option>
-        <option value="powers">Tri : nombre de capacités</option>
+      <input type="search" id="q" placeholder="Rechercher un pet ou une capacité (ex. Money)…" aria-label="Rechercher un pet ou une capacité" data-i18n-placeholder="pets.search" data-i18n-aria="pets.search">
+      <select id="sort" aria-label="Trier" data-i18n-aria="sort.label">
+        <option value="rarity" data-i18n="sort.rarity">Tri : rareté</option>
+        <option value="name" data-i18n="sort.name">Tri : nom A → Z</option>
+        <option value="powers" data-i18n="sort.powers">Tri : nombre de capacités</option>
       </select>
     </div>
-    <div class="chips none-active" id="chips" role="group" aria-label="Filtrer par rareté"></div>
+    <div class="chips none-active" id="chips" role="group" aria-label="Filtrer par rareté" data-i18n-aria="filter.label"></div>
     <div class="count" id="count"></div>
   </div>
 
   <main class="grid" id="grid"></main>
-  <p class="empty outline" id="empty" hidden>Aucun pet ne correspond.</p>
-  <footer class="outline">Données et images tirées du jeu. Site de fan, sans lien avec les créateurs de Grow a Plant.</footer>
+  <p class="empty outline" id="empty" hidden data-i18n="pets.empty">Aucun pet ne correspond.</p>
+  <footer class="outline" data-i18n="footer">Données et images tirées du jeu. Site de fan, sans lien avec les créateurs de Grow a Plant.</footer>
 </div>
 
+<script src="i18n.js"></script>
 <script src="pets-data.js"></script>
 <script>
   const RARITIES = [
@@ -80,8 +82,8 @@
     const list = pets.filter((p) => (!active.size || active.has(p.rarity)) &&
       (!term || p.name.toLowerCase().includes(term) || p.powers.some((pw) => pw.toLowerCase().includes(term))));
     const by = {
-      "rarity": (a, b) => (ORDER[a.rarity] ?? 99) - (ORDER[b.rarity] ?? 99) || a.name.localeCompare(b.name, "fr"),
-      "name": (a, b) => a.name.localeCompare(b.name, "fr"),
+      "rarity": (a, b) => (ORDER[a.rarity] ?? 99) - (ORDER[b.rarity] ?? 99) || a.name.localeCompare(b.name, LANG),
+      "name": (a, b) => a.name.localeCompare(b.name, LANG),
       "powers": (a, b) => b.powers.length - a.powers.length || (ORDER[b.rarity] ?? 99) - (ORDER[a.rarity] ?? 99),
     }[sort.value];
     list.sort(by);
@@ -103,14 +105,14 @@
       img.src = `images/pets/${p.id}.jpg`; img.alt = p.name;
       el.querySelector(".name").textContent = p.name;
       const ul = el.querySelector(".powers");
-      for (const pw of p.powers.length ? p.powers : ["Aucune capacité passive"]) {
+      for (const pw of p.powers.length ? p.powers : [t("pets.none")]) {
         const li = document.createElement("li");
         li.textContent = pw;
         if (!p.powers.length) li.className = "none";
         ul.appendChild(li);
       }
       const tags = el.querySelector(".tags");
-      for (const [flag, cls, label] of [[p.event, "event", "Événement"], [p.flying, "fly", "Volant"], [p.noTrade, "notrade", "Non échangeable"]]) {
+      for (const [flag, cls, label] of [[p.event, "event", t("tag.event")], [p.flying, "fly", t("tag.fly")], [p.noTrade, "notrade", t("tag.notrade")]]) {
         if (!flag) continue;
         const t = document.createElement("span");
         t.className = `tag outline ${cls}`; t.textContent = label;
@@ -118,9 +120,10 @@
       }
       return el;
     }));
-    document.getElementById("count").textContent = `${list.length} pet${list.length > 1 ? "s" : ""} sur ${pets.length}`;
+    document.getElementById("count").textContent = t("pets.count", { n: list.length, s: list.length > 1 ? "s" : "", total: pets.length });
     document.getElementById("empty").hidden = list.length > 0;
   }
+  window.onLangChange = render; // le bouton de langue réaffiche les cartes
   render();
 </script>
 </body>

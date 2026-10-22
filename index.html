@@ -10,37 +10,39 @@
 <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css">
 </head>
-<body>
+<body data-title="plants.title">
 <div class="wrap">
   <header class="banner studs">
-    <h1 class="outline">🌱 Index des plantes</h1>
-    <p class="sub outline">Grow a Plant · index non officiel · gains de base, sans bonus ni mutation</p>
+    <h1 class="outline" data-i18n="plants.title">🌱 Index des plantes</h1>
+    <p class="sub outline" data-i18n="plants.sub">Grow a Plant · index non officiel · gains de base, sans bonus ni mutation</p>
   </header>
-  <nav class="tabs" aria-label="Rubriques">
-    <a class="tab outline" href="./" aria-current="page">🌱 Plantes</a>
-    <a class="tab outline" href="pets.html">🐾 Pets</a>
+  <nav class="tabs" aria-label="Rubriques" data-i18n-aria="nav.label">
+    <a class="tab outline" href="./" aria-current="page" data-i18n="nav.plants">🌱 Plantes</a>
+    <a class="tab outline" href="pets.html" data-i18n="nav.pets">🐾 Pets</a>
+    <button class="tab lang outline" type="button" id="lang" data-i18n="lang.switch">🇬🇧 English</button>
   </nav>
 
   <div class="controls">
     <div class="row">
-      <input type="search" id="q" placeholder="Rechercher une plante…" aria-label="Rechercher une plante">
-      <select id="sort" aria-label="Trier">
-        <option value="rarity">Tri : rareté</option>
-        <option value="income-desc">Tri : gain/s décroissant</option>
-        <option value="income-asc">Tri : gain/s croissant</option>
-        <option value="name">Tri : nom A → Z</option>
-        <option value="grow">Tri : temps de pousse</option>
+      <input type="search" id="q" placeholder="Rechercher une plante…" aria-label="Rechercher une plante" data-i18n-placeholder="plants.search" data-i18n-aria="plants.search">
+      <select id="sort" aria-label="Trier" data-i18n-aria="sort.label">
+        <option value="rarity" data-i18n="sort.rarity">Tri : rareté</option>
+        <option value="income-desc" data-i18n="sort.incomeDesc">Tri : gain/s décroissant</option>
+        <option value="income-asc" data-i18n="sort.incomeAsc">Tri : gain/s croissant</option>
+        <option value="name" data-i18n="sort.name">Tri : nom A → Z</option>
+        <option value="grow" data-i18n="sort.grow">Tri : temps de pousse</option>
       </select>
     </div>
-    <div class="chips none-active" id="chips" role="group" aria-label="Filtrer par rareté"></div>
+    <div class="chips none-active" id="chips" role="group" aria-label="Filtrer par rareté" data-i18n-aria="filter.label"></div>
     <div class="count" id="count"></div>
   </div>
 
   <main class="grid" id="grid"></main>
-  <p class="empty outline" id="empty" hidden>Aucune plante ne correspond.</p>
-  <footer class="outline">Données et images tirées du jeu. Site de fan, sans lien avec les créateurs de Grow a Plant.</footer>
+  <p class="empty outline" id="empty" hidden data-i18n="plants.empty">Aucune plante ne correspond.</p>
+  <footer class="outline" data-i18n="footer">Données et images tirées du jeu. Site de fan, sans lien avec les créateurs de Grow a Plant.</footer>
 </div>
 
+<script src="i18n.js"></script>
 <script src="data.js"></script>
 <script>
   const RARITIES = [
@@ -95,7 +97,7 @@
       "rarity": (a, b) => (ORDER[a.rarity] ?? 99) - (ORDER[b.rarity] ?? 99) || a.income - b.income,
       "income-desc": (a, b) => b.income - a.income,
       "income-asc": (a, b) => a.income - b.income,
-      "name": (a, b) => a.name.localeCompare(b.name, "fr"),
+      "name": (a, b) => a.name.localeCompare(b.name, LANG),
       "grow": (a, b) => a.grow - b.grow,
     }[sort.value];
     list.sort(by);
@@ -110,16 +112,17 @@
         </div>
         <div class="info">
           <span class="name outline"></span>
-          <div class="stats"><span class="income">${money(p.income)}/s</span><span class="grow" title="Temps de pousse">⏱ ${duration(p.grow)}</span></div>
+          <div class="stats"><span class="income">${money(p.income)}/s</span><span class="grow" title="${t("plants.grow")}">⏱ ${duration(p.grow)}</span></div>
         </div>`;
       const img = el.querySelector("img");
       img.src = `images/${p.id}.jpg`; img.alt = p.name;
       el.querySelector(".name").textContent = p.name;
       return el;
     }));
-    document.getElementById("count").textContent = `${list.length} plante${list.length > 1 ? "s" : ""} sur ${plants.length}`;
+    document.getElementById("count").textContent = t("plants.count", { n: list.length, s: list.length > 1 ? "s" : "", total: plants.length });
     document.getElementById("empty").hidden = list.length > 0;
   }
+  window.onLangChange = render; // le bouton de langue réaffiche les cartes
   render();
 </script>
 </body>

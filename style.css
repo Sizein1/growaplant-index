@@ -134,3 +134,7 @@ footer { padding: 0 0 28px; font-size: 13px; --stroke: 1.5px; }
 .tags { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 4px; }
 .tag { font-size: 11px; font-weight: 700; border: 2px solid var(--ink); border-radius: 6px; padding: 0 5px; background: #4a4e5c; }
 .tag.event { background: #e0702a; } .tag.fly { background: #2f8ff0; } .tag.notrade { background: #b8323f; }
+
+/* Bouton de langue : à droite du menu, violet pour le distinguer des rubriques */
+.tab.lang { margin-left: auto; --tab: #7b4de0; cursor: pointer; font-size: 16px; }
+@media (max-width: 480px) { .tab.lang { margin-left: 0; } }
