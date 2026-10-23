@@ -263,3 +263,14 @@ footer { padding: 0 0 28px; font-size: 13px; --stroke: 1.5px; }
 .trade.taken { border-color: #555a68; }
 .trade .status { margin: 0; font-weight: 700; color: #ffb020; }
 .pick-head { grid-column: 1 / -1; font-size: 14px; font-weight: 700; color: #ffe46b; padding: 2px 4px 0; }
+
+/* Giveaways */
+.section-title { margin: 20px 0 10px; font-size: 22px; --stroke: 2px; }
+.kind.active { background: #38b84c; } .kind.pending { background: #f0b020; } .kind.rejected { background: #d23b3b; }
+.kind.drawn, .kind.closed, .kind.no_participants, .kind.drawing { background: #6b7080; }
+.gw-items .item { font-size: 14px; }
+.gw-items .item img { width: 44px; height: 44px; }
+.gw-count { margin: 0; font-size: 14px; color: var(--muted); }
+.gw-in { font-weight: 700; color: var(--money); }
+.gw-note { color: var(--muted); font-size: 14px; }
+.countdown { font-variant-numeric: tabular-nums; }

@@ -1,5 +1,5 @@
-// Actions du bot Discord : vérifier qu'un joueur est sur le serveur, créer / supprimer un salon de trade privé.
-// En test local sans DISCORD_BOT_TOKEN, tout est simulé (aucun appel à Discord).
+// Actions du bot Discord : membres, salons privés (trades, giveaways), messages, images de preuve.
+// En test local sans DISCORD_BOT_TOKEN, tout est simulé (aucun appel à Discord, actions écrites dans le journal).
 
 const API = "https://discord.com/api/v10";
 const SIMULATED = () => !process.env.DISCORD_BOT_TOKEN && process.env.NETLIFY_DEV === "true";
@@ -13,7 +13,7 @@ const BOT_PERMS = String(VIEW | SEND | EMBED | ATTACH | HISTORY | MANAGE_CHANNEL
 const modRoles = () => (process.env.DISCORD_MOD_ROLES || "1560025359322321076,1560027613320183839")
   .split(",").map((s) => s.trim()).filter(Boolean);
 
-async function api(path, options = {}) {
+export async function api(path, options = {}) {
   const res = await fetch(API + path, {
     ...options,
     headers: { authorization: `Bot ${process.env.DISCORD_BOT_TOKEN}`, "content-type": "application/json", ...(options.headers || {}) },
@@ -32,8 +32,8 @@ export async function isMember(userId) {
   return res.ok;
 }
 
-// Noms des pets et des œufs pour le message du salon, lus dans pets-data.js et eggs-data.js du site
-async function petNames(origin) {
+// Noms des pets et des œufs pour les messages, lus dans pets-data.js et eggs-data.js du site
+export async function itemNames(origin) {
   const names = new Map();
   for (const [file, prefix, label] of [["pets-data.js", "pet", ""], ["eggs-data.js", "egg", "🥚 "]]) {
     try {
@@ -45,56 +45,97 @@ async function petNames(origin) {
   return names;
 }
 
-const slug = (s) => String(s).toLowerCase().normalize("NFD").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 30) || "joueur";
+export const slug = (s) => String(s).toLowerCase().normalize("NFD").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 30) || "joueur";
+export const isModerator = (roleIds = []) => roleIds.some((r) => modRoles().includes(r));
+export const itemList = (names, refs) => refs.length ? refs.map((r) => `• ${names.get(r) || r.split(":")[1]}`).join("\n") : "—";
 
-// Crée le salon privé : visible par les 2 joueurs, les modérateurs et le bot ; caché pour @everyone
-export async function createTradeChannel(trade, accepter, origin, deleteAt) {
-  const name = `trade-${slug(trade.author.name)}-${slug(accepter.name)}`.slice(0, 90);
-  if (SIMULATED()) return { id: `simule-${Date.now()}`, name };
-
+// Salon privé : visible par les membres donnés, les modérateurs et le bot ; caché pour @everyone
+export async function createPrivateChannel({ name, memberIds, parentId, topic }) {
+  name = name.slice(0, 90);
+  if (SIMULATED()) { console.log(`[discord simulé] salon privé #${name} pour ${memberIds.join(", ")}`); return { id: `simule-${Date.now()}`, name }; }
   const guild = process.env.DISCORD_GUILD_ID;
   const overwrites = [
     { id: guild, type: 0, deny: String(VIEW) },                                  // @everyone : rien
-    { id: trade.author.id, type: 1, allow: MEMBER_PERMS },
-    { id: accepter.id, type: 1, allow: MEMBER_PERMS },
+    ...memberIds.map((id) => ({ id, type: 1, allow: MEMBER_PERMS })),
     { id: process.env.DISCORD_CLIENT_ID, type: 1, allow: BOT_PERMS },           // le bot lui-même
     ...modRoles().map((id) => ({ id, type: 0, allow: MEMBER_PERMS })),
   ];
   const res = await api(`/guilds/${guild}/channels`, {
     method: "POST",
-    body: JSON.stringify({
-      name, type: 0, permission_overwrites: overwrites,
-      ...(process.env.DISCORD_CATEGORY_ID ? { parent_id: process.env.DISCORD_CATEGORY_ID } : {}),
-      topic: "Salon de trade créé depuis le site Index Grow a Plant",
-    }),
+    body: JSON.stringify({ name, type: 0, permission_overwrites: overwrites, topic, ...(parentId ? { parent_id: parentId } : {}) }),
   });
   if (!res.ok) throw new Error(`création du salon : ${res.status} ${await res.text()}`);
   const channel = await res.json();
-
-  // Message d'accueil : mentionne les deux joueurs, résume le trade (FR + EN)
-  const names = await petNames(origin);
-  const list = (refs) => refs.length ? refs.map((r) => `• ${names.get(r) || r.split(":")[1]}`).join("\n") : "—";
-  const ts = Math.floor(deleteAt / 1000);
-  const fields = [];
-  if (trade.kind === "offer") fields.push({ name: `🎁 ${trade.author.name} offre / offers`, value: list(trade.have), inline: true });
-  fields.push({ name: `🔎 ${trade.author.name} veut / wants`, value: list(trade.want), inline: true });
-  fields.push({ name: "🎮 Roblox", value: `${trade.author.name} : **${trade.roblox}**`, inline: false });
-  if (trade.note) fields.push({ name: "💬 Message", value: trade.note.slice(0, 1000), inline: false });
-  await api(`/channels/${channel.id}/messages`, {
-    method: "POST",
-    body: JSON.stringify({
-      content: `🤝 <@${trade.author.id}> <@${accepter.id}>\n**${accepter.name}** a accepté le trade de **${trade.author.name}** ! / accepted the trade!\n` +
-        `Mettez-vous d'accord ici, puis faites l'échange dans le jeu. / Agree here, then trade in game.\n` +
-        `⏳ Ce salon sera supprimé <t:${ts}:R>. / This channel will be deleted <t:${ts}:R>.`,
-      embeds: [{ title: "Trade", color: 0x38b84c, fields }],
-      allowed_mentions: { users: [trade.author.id, accepter.id] },
-    }),
-  });
   return { id: channel.id, name };
 }
 
+// Envoie un message ; renvoie son identifiant
+export async function sendMessage(channelId, body) {
+  if (SIMULATED() || String(channelId).startsWith("simule-")) {
+    console.log(`[discord simulé] message dans ${channelId} : ${(body.content || "").replace(/\n/g, " ").slice(0, 200)}`);
+    return `simule-msg-${Date.now()}`;
+  }
+  const res = await api(`/channels/${channelId}/messages`, { method: "POST", body: JSON.stringify(body) });
+  if (!res.ok) throw new Error(`message : ${res.status} ${await res.text()}`);
+  return (await res.json()).id;
+}
+
+export async function editMessage(channelId, messageId, body) {
+  if (SIMULATED() || String(messageId).startsWith("simule-")) { console.log(`[discord simulé] message ${messageId} modifié`); return; }
+  await api(`/channels/${channelId}/messages/${messageId}`, { method: "PATCH", body: JSON.stringify(body) });
+}
+
+// Dernière image postée dans un salon (capture d'écran de preuve) : { url, filename, contentType } ou null
+export async function lastImage(channelId) {
+  if (SIMULATED() || String(channelId).startsWith("simule-")) return process.env.SIM_NO_IMAGE ? null : { url: "https://example.com/preuve.png", filename: "preuve.png", contentType: "image/png" };
+  const res = await api(`/channels/${channelId}/messages?limit=50`);
+  if (!res.ok) return null;
+  for (const message of await res.json()) { // du plus récent au plus ancien
+    if (message.author?.bot) continue;
+    const img = (message.attachments || []).find((a) => (a.content_type || "").startsWith("image/"));
+    if (img) return { url: img.url, filename: img.filename, contentType: img.content_type };
+  }
+  return null;
+}
+
+// Republie une image (téléchargée puis renvoyée en pièce jointe : le lien d'origine expire chez Discord)
+export async function sendImage(channelId, body, image) {
+  if (SIMULATED()) { console.log(`[discord simulé] image ${image.filename} dans ${channelId} : ${body.content}`); return; }
+  const file = await (await fetch(image.url)).arrayBuffer();
+  const form = new FormData();
+  form.append("payload_json", JSON.stringify({ ...body, attachments: [{ id: 0, filename: image.filename }] }));
+  form.append("files[0]", new Blob([file], { type: image.contentType }), image.filename);
+  const res = await fetch(`${API}/channels/${channelId}/messages`, { method: "POST", headers: { authorization: `Bot ${process.env.DISCORD_BOT_TOKEN}` }, body: form });
+  if (!res.ok) throw new Error(`image : ${res.status} ${await res.text()}`);
+}
+
+// Salon privé d'un trade accepté, avec son message d'accueil
+export async function createTradeChannel(trade, accepter, origin, deleteAt) {
+  const channel = await createPrivateChannel({
+    name: `trade-${slug(trade.author.name)}-${slug(accepter.name)}`, memberIds: [trade.author.id, accepter.id],
+    parentId: process.env.DISCORD_CATEGORY_ID, topic: "Salon de trade créé depuis le site Index Grow a Plant",
+  });
+
+  // Message d'accueil : mentionne les deux joueurs, résume le trade (FR + EN)
+  const names = await itemNames(origin);
+  const ts = Math.floor(deleteAt / 1000);
+  const fields = [];
+  if (trade.kind === "offer") fields.push({ name: `🎁 ${trade.author.name} offre / offers`, value: itemList(names, trade.have), inline: true });
+  fields.push({ name: `🔎 ${trade.author.name} veut / wants`, value: itemList(names, trade.want), inline: true });
+  fields.push({ name: "🎮 Roblox", value: `${trade.author.name} : **${trade.roblox}**`, inline: false });
+  if (trade.note) fields.push({ name: "💬 Message", value: trade.note.slice(0, 1000), inline: false });
+  await sendMessage(channel.id, {
+    content: `🤝 <@${trade.author.id}> <@${accepter.id}>\n**${accepter.name}** a accepté le trade de **${trade.author.name}** ! / accepted the trade!\n` +
+      `Mettez-vous d'accord ici, puis faites l'échange dans le jeu. / Agree here, then trade in game.\n` +
+      `⏳ Ce salon sera supprimé <t:${ts}:R>. / This channel will be deleted <t:${ts}:R>.`,
+    embeds: [{ title: "Trade", color: 0x38b84c, fields }],
+    allowed_mentions: { users: [trade.author.id, accepter.id] },
+  });
+  return channel;
+}
+
 export async function deleteChannel(channelId) {
-  if (SIMULATED() || String(channelId).startsWith("simule-")) return true;
+  if (SIMULATED() || String(channelId).startsWith("simule-")) { console.log(`[discord simulé] salon ${channelId} supprimé`); return true; }
   const res = await api(`/channels/${channelId}`, { method: "DELETE" });
   return res.ok || res.status === 404; // déjà supprimé à la main : c'est bon aussi
 }

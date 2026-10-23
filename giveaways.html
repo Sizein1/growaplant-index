@@ -1,0 +1,278 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Giveaways</title>
+<meta name="description" content="Giveaways Grow a Plant : propose un giveaway d'œufs ou de pets, ou participe à ceux en cours.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body data-title="gw.title">
+<div class="wrap">
+  <header class="banner studs">
+    <h1 class="outline" data-i18n="gw.title">🎁 Giveaways</h1>
+    <p class="sub outline" data-i18n="gw.sub"></p>
+  </header>
+  <nav class="tabs" aria-label="Rubriques" data-i18n-aria="nav.label">
+    <a class="tab outline" href="./" data-i18n="nav.plants">🌱 Plantes</a>
+    <a class="tab outline" href="pets.html" data-i18n="nav.pets">🐾 Pets</a>
+    <a class="tab outline" href="trades.html" data-i18n="nav.trades">🤝 Trades</a>
+    <a class="tab outline" href="giveaways.html" aria-current="page" data-i18n="nav.giveaways">🎁 Giveaways</a>
+    <button class="tab lang outline" type="button" id="lang" data-i18n="lang.switch">🇬🇧 English</button>
+  </nav>
+
+  <p class="safety" data-i18n="gw.info"></p>
+  <div class="account" id="account" aria-live="polite"></div>
+
+  <details class="post" id="post">
+    <summary class="outline" data-i18n="gw.new">➕ Proposer un giveaway</summary>
+    <div class="form" id="loginPrompt" hidden>
+      <p class="duos-hint" data-i18n="gw.loginToPost"></p>
+      <div class="row"><a class="btn discord" href="/api/auth/login" data-i18n="trades.login"></a></div>
+    </div>
+    <form class="form" id="form" novalidate hidden>
+      <fieldset>
+        <legend><span data-i18n="gw.items"></span> <span class="pick-count" id="itemsCount"></span></legend>
+        <div class="items" id="items"></div>
+        <input type="search" class="pick-search" id="search" data-i18n-placeholder="trades.pick" data-i18n-aria="trades.pick">
+        <div class="pick-grid" id="grid" role="group" data-i18n-aria="gw.items"></div>
+      </fieldset>
+      <label><span data-i18n="gw.duration"></span><select id="hours"></select></label>
+      <label><span data-i18n="trades.note"></span><textarea id="note" maxlength="300"></textarea></label>
+      <label><span data-i18n="trades.roblox"></span><input type="text" id="roblox" maxlength="20" autocomplete="username" required></label>
+      <div class="row"><button class="btn green" type="submit" id="publish" data-i18n="gw.submit"></button></div>
+      <p class="form-msg" id="formMsg" role="status" aria-live="polite"></p>
+    </form>
+  </details>
+
+  <section id="mineBox" hidden>
+    <h2 class="section-title outline" data-i18n="gw.mine"></h2>
+    <div class="trade-list" id="mine"></div>
+  </section>
+
+  <h2 class="section-title outline" data-i18n="gw.active"></h2>
+  <div class="trade-list" id="active"></div>
+  <p class="empty outline" id="activeEmpty" hidden></p>
+
+  <section id="doneBox" hidden>
+    <h2 class="section-title outline" data-i18n="gw.finished"></h2>
+    <div class="trade-list" id="done"></div>
+  </section>
+
+  <footer class="outline" data-i18n="footer"></footer>
+</div>
+
+<script src="i18n.js"></script>
+<script src="pets-data.js"></script>
+<script src="eggs-data.js"></script>
+<script>
+  const RARITY_ORDER = ["Common", "Uncommon", "Rare", "Epic", "Legendary", "Mythic", "SECRET", "VOID", "EXCLUSIVE", "CELESTIAL"];
+  const RARITY_COLOR = {
+    Common: "#9aa0a8", Uncommon: "#38b84c", Rare: "#2f8ff0", Epic: "#a24df0", Legendary: "#f0b020",
+    Mythic: "#f0405f", SECRET: "#24252b", VOID: "#5b2fd6", EXCLUSIVE: "#ff7a1a", CELESTIAL: "#22b8cf",
+  };
+  const byRarity = (a, b) => RARITY_ORDER.indexOf(b.rarity) - RARITY_ORDER.indexOf(a.rarity) || a.name.localeCompare(b.name);
+  const pets = (window.PETS || []).slice().sort(byRarity);
+  const eggs = (window.EGGS || []).slice().sort(byRarity);
+  const ITEMS = new Map([
+    ...eggs.map((e) => [`egg:${e.id}`, { name: e.name, img: `images/eggs/${e.id}.jpg`, sub: e.rarity }]),
+    ...pets.map((p) => [`pet:${p.id}`, { name: p.name, img: `images/pets/${p.id}.jpg`, sub: p.rarity }]),
+  ]);
+  const MAX_ITEMS = 4;
+
+  let me = null, invite = "";
+  let adminKey = ""; try { adminKey = localStorage.getItem("tradesAdminKey") || ""; } catch (e) {}
+  if (location.hash === "#admin") {
+    const key = prompt(t("trades.adminPrompt"), adminKey);
+    if (key !== null) { adminKey = key.trim(); try { localStorage.setItem("tradesAdminKey", adminKey); } catch (e) {} if (adminKey) alert(t("trades.admin")); }
+  }
+
+  const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
+  function errorNode(data) {
+    const key = `gw.err.${data && data.error}`, key2 = `trades.err.${data && data.error}`;
+    const box = el("span", null, t(I18N[LANG][key] ? key : I18N[LANG][key2] ? key2 : "trades.err.network") + " ");
+    if (data && data.error === "not_member" && (data.invite || invite)) {
+      const a = el("a", null, t("trades.join")); a.href = data.invite || invite; a.target = "_blank"; a.rel = "noopener"; box.appendChild(a);
+    }
+    return box;
+  }
+
+  // ---------- Compte Discord ----------
+  function renderAccount() {
+    const box = document.getElementById("account");
+    if (me) {
+      const out = el("a", null, t("trades.logout")); out.href = "/api/auth/logout";
+      box.replaceChildren(el("span", null, t("trades.loggedAs", { name: me.name }) + " · "), out);
+    } else {
+      const a = el("a", "btn discord", t("trades.login")); a.href = "/api/auth/login"; box.replaceChildren(a);
+    }
+    document.getElementById("form").hidden = !me;
+    document.getElementById("loginPrompt").hidden = !!me;
+  }
+
+  // ---------- Formulaire : choix des lots (œufs puis pets) ----------
+  let picked = [];
+  function itemChip(ref, onRemove) {
+    const info = ITEMS.get(ref) || { name: ref.split(":")[1], img: "" };
+    const chip = el("span", "item");
+    const img = el("img"); img.src = info.img; img.alt = ""; img.loading = "lazy";
+    chip.append(img, el("span", null, info.name));
+    if (onRemove) { const rm = el("button", "rm", "✕"); rm.type = "button"; rm.setAttribute("aria-label", `${t("trades.delete")} ${info.name}`); rm.onclick = onRemove; chip.appendChild(rm); }
+    return chip;
+  }
+  function toggle(ref) {
+    picked = picked.includes(ref) ? picked.filter((r) => r !== ref) : picked.length < MAX_ITEMS ? [...picked, ref] : picked;
+    renderPicked();
+  }
+  function renderPicked() {
+    document.getElementById("items").replaceChildren(...picked.map((ref) => itemChip(ref, () => toggle(ref))));
+    document.getElementById("itemsCount").textContent = `${picked.length}/${MAX_ITEMS}`;
+    const full = picked.length >= MAX_ITEMS;
+    document.querySelectorAll("#grid .pick-tile").forEach((tile) => {
+      const on = picked.includes(tile.dataset.ref);
+      tile.setAttribute("aria-pressed", String(on)); tile.disabled = full && !on;
+    });
+  }
+  (function buildGrid() {
+    const grid = document.getElementById("grid");
+    const nodes = [];
+    for (const [prefix, list, headKey] of [["egg", eggs, "trades.eggsHead"], ["pet", pets, "trades.petsHead"]]) {
+      if (!list.length) continue;
+      const head = el("div", "pick-head", t(headKey)); head.dataset.i18n = headKey; nodes.push(head);
+      for (const x of list) {
+        const ref = `${prefix}:${x.id}`, info = ITEMS.get(ref);
+        const tile = el("button", "pick-tile"); tile.type = "button"; tile.dataset.ref = ref; tile.dataset.name = info.name.toLowerCase();
+        tile.style.setProperty("--c", RARITY_COLOR[info.sub] || "#777");
+        const img = el("img"); img.loading = "lazy"; img.width = 72; img.height = 72; img.alt = ""; img.src = info.img;
+        tile.append(img, el("span", "pick-name", info.name), el("span", "pick-rk", info.sub));
+        tile.onclick = () => toggle(ref);
+        nodes.push(tile);
+      }
+    }
+    grid.replaceChildren(...nodes);
+    const search = document.getElementById("search");
+    search.oninput = () => { const term = search.value.trim().toLowerCase(); grid.querySelectorAll(".pick-tile").forEach((tile) => { tile.hidden = term && !tile.dataset.name.includes(term); }); };
+  })();
+  function fillHours() {
+    const select = document.getElementById("hours"), current = select.value || "1";
+    select.replaceChildren(...Array.from({ length: 24 }, (_, i) => new Option(t("gw.hours", { n: i + 1, s: i ? "s" : "" }), String(i + 1))));
+    select.value = current;
+  }
+
+  const form = document.getElementById("form");
+  const msg = document.getElementById("formMsg");
+  const showMsg = (node, ok) => { msg.replaceChildren(typeof node === "string" ? document.createTextNode(node) : node); msg.className = "form-msg " + (ok ? "ok" : "err"); };
+  form.onsubmit = async (e) => {
+    e.preventDefault();
+    const body = { items: picked, hours: Number(document.getElementById("hours").value), note: document.getElementById("note").value, roblox: document.getElementById("roblox").value.trim() };
+    if (!picked.length) { showMsg(t("gw.err.invalid_items"), false); return; }
+    const btn = document.getElementById("publish"); btn.disabled = true;
+    try {
+      const res = await fetch("/api/giveaways", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) { showMsg(errorNode(data), false); return; }
+      try { localStorage.setItem("tradeRoblox", body.roblox); } catch (e) {}
+      picked = []; renderPicked(); document.getElementById("note").value = "";
+      showMsg(t("gw.sent"), true);
+      load();
+    } catch (err) { showMsg(t("trades.err.network"), false); } finally { btn.disabled = false; }
+  };
+  try { document.getElementById("roblox").value = localStorage.getItem("tradeRoblox") || ""; } catch (e) {}
+
+  // ---------- Listes ----------
+  const countText = (n) => t(n > 1 ? "gw.count.many" : "gw.count.one", { n });
+  let giveaways = [];
+  function countdown(end) {
+    const s = Math.max(0, Math.round((end - Date.now()) / 1000));
+    const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), sec = s % 60;
+    return s === 0 ? t("gw.drawing") : `${h ? h + " h " : ""}${String(m).padStart(2, "0")} min ${String(sec).padStart(2, "0")} s`;
+  }
+
+  function card(gw) {
+    const c = el("article", "trade gw");
+    const head = el("div", "trade-head");
+    head.append(el("span", `kind ${gw.status} outline`, t(`gw.status.${gw.status}`)), el("span", "when", t("gw.by", { name: gw.creator.name })));
+    c.appendChild(head);
+    const items = el("div", "items gw-items"); items.append(...gw.items.map((r) => itemChip(r))); c.appendChild(items);
+    if (gw.note) c.appendChild(el("p", "note", gw.note));
+
+    const mine = me && me.id === gw.creator.id;
+    const actions = el("div", "row");
+    if (gw.status === "active") {
+      const left = el("p", "status countdown", ""); left.dataset.end = gw.endsAt; left.textContent = "⏳ " + countdown(gw.endsAt);
+      c.append(left, el("p", "gw-count", countText(gw.count)));
+      if (mine) actions.appendChild(el("span", "gw-note", t("gw.yours")));
+      else if (gw.entered) actions.appendChild(el("span", "gw-in", t("gw.entered")));
+      else if (me) { const b = el("button", "btn green", t("gw.enter")); b.type = "button"; b.onclick = () => enter(gw, c); actions.appendChild(b); }
+      else { const a = el("a", "btn discord", t("gw.loginToEnter")); a.href = "/api/auth/login"; actions.appendChild(a); }
+    } else if (gw.status === "pending") {
+      c.appendChild(el("p", "status", t("gw.pendingInfo", { n: gw.hours })));
+    } else if (gw.status === "rejected") {
+      c.appendChild(el("p", "status", t("gw.rejectedInfo")));
+    } else if (gw.winner) {
+      c.appendChild(el("p", "status", t("gw.winner", { name: gw.winner.name })));
+      c.appendChild(el("p", "gw-count", countText(gw.entries ?? gw.count)));
+    } else if (gw.status === "no_participants") {
+      c.appendChild(el("p", "status", t("gw.noEntries")));
+    }
+    if ((mine && gw.status === "pending") || adminKey) {
+      const del = el("button", "btn red", t(mine && gw.status === "pending" ? "gw.cancel" : "trades.delete")); del.type = "button";
+      del.onclick = async () => {
+        if (!confirm(t("gw.confirmCancel"))) return;
+        const headers = adminKey && !(mine && gw.status === "pending") ? { "x-admin-key": adminKey } : {};
+        const res = await fetch(`/api/giveaways?id=${encodeURIComponent(gw.id)}`, { method: "DELETE", headers }).catch(() => null);
+        if (res && res.ok) load();
+      };
+      actions.appendChild(del);
+    }
+    if (actions.children.length) c.appendChild(actions);
+    return c;
+  }
+
+  async function enter(gw, c) {
+    const res = await fetch(`/api/giveaways/enter?id=${encodeURIComponent(gw.id)}`, { method: "POST" }).catch(() => null);
+    const data = res ? await res.json().catch(() => ({})) : {};
+    if (res && res.ok) { gw.entered = true; gw.count = data.count; render(); return; }
+    const err = c.querySelector(".card-msg") || c.appendChild(el("p", "form-msg err card-msg"));
+    err.replaceChildren(errorNode(data));
+  }
+
+  function render() {
+    const mine = giveaways.filter((g) => me && g.creator.id === me.id && (g.status === "pending" || g.status === "rejected"));
+    const active = giveaways.filter((g) => g.status === "active" || g.status === "drawing");
+    const done = giveaways.filter((g) => ["drawn", "closed", "no_participants"].includes(g.status));
+    document.getElementById("mine").replaceChildren(...mine.map(card));
+    document.getElementById("mineBox").hidden = !mine.length;
+    document.getElementById("active").replaceChildren(...active.map(card));
+    const empty = document.getElementById("activeEmpty");
+    empty.hidden = active.length > 0; empty.textContent = t(loaded ? "gw.empty" : "trades.loading");
+    document.getElementById("done").replaceChildren(...done.map(card));
+    document.getElementById("doneBox").hidden = !done.length;
+  }
+
+  let loaded = false;
+  async function load() {
+    try { giveaways = (await (await fetch("/api/giveaways", { cache: "no-store" })).json()).giveaways || []; } catch (e) { giveaways = []; }
+    loaded = true; render();
+  }
+  async function loadMe() {
+    try { const data = await (await fetch("/api/auth/me", { cache: "no-store" })).json(); me = data.user; invite = data.invite || ""; } catch (e) { me = null; }
+    renderAccount(); load();
+  }
+
+  // Compte à rebours en direct ; recharge la liste quand un giveaway se termine
+  setInterval(() => {
+    let ended = false;
+    document.querySelectorAll(".countdown").forEach((n) => { n.textContent = "⏳ " + countdown(Number(n.dataset.end)); if (Number(n.dataset.end) <= Date.now()) ended = true; });
+    if (ended && !window.__reloading) { window.__reloading = true; setTimeout(() => { window.__reloading = false; load(); }, 70000); } // le tirage a lieu dans la minute
+  }, 1000);
+
+  window.onLangChange = () => { fillHours(); renderPicked(); renderAccount(); render(); };
+  window.onLangChange();
+  loadMe();
+</script>
+</body>
+</html>
