@@ -4,10 +4,9 @@
 //   gw:close                -> ferme le salon de remise
 // Chaque requête est signée par Discord (Ed25519) : on la vérifie avec DISCORD_PUBLIC_KEY.
 import { createPublicKey, verify } from "node:crypto";
-import { isModerator, itemNames, lastImage, sendImage, deleteChannel } from "../lib/discord.mjs";
+import { isModerator, itemNames, lastImage, sendImage, sendMessage, deleteChannel } from "../lib/discord.mjs";
 import { GW, getGiveaway, saveGiveaway, validationMessage, announce } from "../lib/giveaways.mjs";
 
-const API = "https://discord.com/api/v10";
 const DEV = () => process.env.NETLIFY_DEV === "true" && !process.env.DISCORD_PUBLIC_KEY; // test local : pas de signature
 const json = (body, status = 200) => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
 const ephemeral = (content) => json({ type: 4, data: { content, flags: 64 } }); // réponse visible seulement par celui qui clique
@@ -25,15 +24,9 @@ function signatureOk(req, raw) {
   } catch { return false; }
 }
 
-// Messages envoyés après coup (suite d'une réponse différée)
-async function followUp(interaction, method, path, body) {
-  if (DEV()) { console.log(`[discord simulé] suite ${method} ${path} : ${body.content || ""}`); return; }
-  await fetch(`${API}/webhooks/${interaction.application_id}/${interaction.token}${path}`, {
-    method, headers: { "content-type": "application/json" }, body: JSON.stringify(body),
-  });
-}
-
-export default async (req, context) => {
+// Important : sur Netlify, la fonction s'arrête dès qu'elle a répondu. Tout le travail (annonce, preuve,
+// suppression du salon) est donc fait AVANT de répondre à Discord, qui laisse 3 secondes.
+export default async (req) => {
   const raw = await req.text();
   if (!signatureOk(req, raw)) return new Response("signature invalide", { status: 401 });
   const interaction = JSON.parse(raw);
@@ -46,7 +39,6 @@ export default async (req, context) => {
   const clicker = member.user || interaction.user || {};
   const mod = isModerator(member.roles || []);
   const origin = new URL(req.url).origin;
-  const later = (promise) => (context?.waitUntil ? context.waitUntil(promise) : promise); // travail après la réponse
 
   const gw = await getGiveaway(id);
   if (!gw) return ephemeral("Ce giveaway n'existe plus. / This giveaway no longer exists.");
@@ -63,7 +55,10 @@ export default async (req, context) => {
       ? { ...gw, status: "active", reviewedBy: clicker.id, startsAt: now, endsAt: now + duration }
       : { ...gw, status: "rejected", reviewedBy: clicker.id, finishedAt: now };
     await saveGiveaway(updated);
-    if (ok) later(announce(updated, origin).then((msgId) => saveGiveaway({ ...updated, announceMsg: msgId })).catch(console.error));
+    if (ok) {
+      // Annonce publique ; si Discord échoue ici, la tâche de chaque minute la renverra (giveaway sans announceMsg)
+      try { await saveGiveaway({ ...updated, announceMsg: await announce(updated, origin) }); } catch (err) { console.error("annonce :", err); }
+    }
     const names = await itemNames(origin);
     return json({ type: 7, data: validationMessage(updated, names, { ok, by: clicker.id }) }); // met à jour le message
   }
@@ -76,32 +71,28 @@ export default async (req, context) => {
     if (gw.proofSent) return ephemeral("La preuve a déjà été envoyée. / Proof already sent.");
     const image = await lastImage(gw.channelId);
     if (!image) return ephemeral("📸 Envoie d'abord une capture d'écran de l'échange dans ce salon, puis reclique. / Post a screenshot first, then click again.");
-    later((async () => {
-      try {
-        await sendImage(GW.proofs, {
-          content: `📸 Preuve de remise du giveaway / Giveaway hand-over proof\n🎁 Créateur : <@${gw.creator.id}> · 🏆 Gagnant : <@${gw.winner.id}>`,
-          allowed_mentions: { users: [gw.creator.id, gw.winner.id] },
-        }, image);
-        await saveGiveaway({ ...gw, proofSent: true, proofAt: Date.now() });
-        await followUp(interaction, "PATCH", "/messages/@original", {
-          components: [{ type: 1, components: [{ type: 2, style: 4, label: "Fermer le salon / Close channel", emoji: { name: "🔒" }, custom_id: `gw:close:${gw.id}` }] }],
-        });
-        await followUp(interaction, "POST", "", { content: "✅ Preuve envoyée dans le salon des preuves. Vous pouvez fermer ce salon. / Proof sent. You can close this channel." });
-      } catch (err) {
-        console.error(err);
-        await followUp(interaction, "POST", "", { content: "❌ L'envoi de la preuve a échoué, réessaie. / Sending the proof failed, try again.", flags: 64 });
-      }
-    })());
-    return json({ type: 6 }); // réponse différée : le travail continue juste après
+    try {
+      await sendImage(GW.proofs, {
+        content: `📸 Preuve de remise du giveaway / Giveaway hand-over proof\n🎁 Créateur : <@${gw.creator.id}> · 🏆 Gagnant : <@${gw.winner.id}>`,
+        allowed_mentions: { users: [gw.creator.id, gw.winner.id] },
+      }, image);
+    } catch (err) {
+      console.error(err);
+      return ephemeral("❌ L'envoi de la preuve a échoué, réessaie. / Sending the proof failed, try again.");
+    }
+    await saveGiveaway({ ...gw, proofSent: true, proofAt: Date.now() });
+    await sendMessage(gw.channelId, { content: "✅ Preuve envoyée dans le salon des preuves. Vous pouvez fermer ce salon. / Proof sent. You can close this channel." }).catch(console.error);
+    // Remplace le bouton "Échange effectué" par "Fermer le salon"
+    return json({ type: 7, data: { components: [{ type: 1, components: [{ type: 2, style: 4, label: "Fermer le salon / Close channel", emoji: { name: "🔒" }, custom_id: `gw:close:${gw.id}` }] }] } });
   }
 
   // --- Fermeture du salon ---
   if (action === "close") {
-    later((async () => {
-      await new Promise((r) => setTimeout(r, 1500)); // laisse le message de fermeture s'afficher
-      if (await deleteChannel(gw.channelId)) await saveGiveaway({ ...gw, status: "closed", closedAt: Date.now() });
-    })());
-    return json({ type: 4, data: { content: "🔒 Fermeture du salon… / Closing the channel…" } });
+    if (await deleteChannel(gw.channelId)) {
+      await saveGiveaway({ ...gw, status: "closed", closedAt: Date.now() });
+      return json({ type: 6 }); // le salon n'existe plus : simple accusé de réception
+    }
+    return ephemeral("❌ Impossible de fermer le salon, réessaie. / Could not close the channel, try again.");
   }
 
   return ephemeral("Action inconnue.");

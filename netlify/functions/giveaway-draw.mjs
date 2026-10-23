@@ -1,6 +1,6 @@
-// Tâche planifiée (chaque minute) : tire au sort les giveaways terminés, supprime les salons de remise
+// Tâche planifiée (chaque minute) : envoie les annonces manquantes, tire au sort les giveaways terminés, supprime les salons de remise
 // trop vieux (7 jours) et efface les giveaways finis depuis plus de 3 jours.
-import { store, gwKey, entryPrefix, saveGiveaway, draw, KEEP_FINISHED_MS } from "../lib/giveaways.mjs";
+import { store, gwKey, entryPrefix, saveGiveaway, draw, announce, KEEP_FINISHED_MS } from "../lib/giveaways.mjs";
 import { deleteChannel } from "../lib/discord.mjs";
 
 export async function runDraws(origin) {
@@ -12,7 +12,10 @@ export async function runDraws(origin) {
     const gw = await s.get(key, { type: "json" });
     if (!gw) continue;
     try {
-      if (gw.status === "active" && gw.endsAt <= now) {
+      if (gw.status === "active" && gw.endsAt > now && !gw.announceMsg) {
+        // Rattrapage : giveaway validé dont l'annonce n'est pas partie (erreur Discord au moment du clic)
+        await saveGiveaway({ ...gw, announceMsg: await announce(gw, origin) });
+      } else if (gw.status === "active" && gw.endsAt <= now) {
         await saveGiveaway({ ...gw, status: "drawing" }); // évite un double tirage si la tâche suivante démarre pendant celle-ci
         await saveGiveaway(await draw(gw, origin));
         drawn++;
