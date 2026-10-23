@@ -122,6 +122,9 @@ export async function createTradeChannel(trade, accepter, origin, deleteAt) {
   const fields = [];
   if (trade.kind === "offer") fields.push({ name: `🎁 ${trade.author.name} offre / offers`, value: itemList(names, trade.have), inline: true });
   fields.push({ name: `🔎 ${trade.author.name} veut / wants`, value: itemList(names, trade.want), inline: true });
+  if (trade.kind === "request") { // recherche : ce qui est proposé en échange, s'il y a quelque chose
+    fields.push({ name: "🎁 En échange / In exchange", value: trade.have.length ? itemList(names, trade.have) : "À discuter / Open to offers", inline: true });
+  }
   fields.push({ name: "🎮 Roblox", value: `${trade.author.name} : **${trade.roblox}**`, inline: false });
   if (trade.note) fields.push({ name: "💬 Message", value: trade.note.slice(0, 1000), inline: false });
   await sendMessage(channel.id, {

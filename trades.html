@@ -43,13 +43,13 @@
       </fieldset>
 
       <fieldset id="haveBox">
-        <legend><span data-i18n="trades.have"></span> <span class="pick-count" id="haveCount"></span></legend>
+        <legend><span id="haveLegend" data-i18n="trades.have"></span> <span class="pick-count" id="haveCount"></span></legend>
         <div class="items" id="haveItems"></div>
         <input type="search" class="pick-search" id="haveSearch" data-i18n-placeholder="trades.pick" data-i18n-aria="trades.pick">
         <div class="pick-grid" id="haveGrid" role="group" data-i18n-aria="trades.have"></div>
       </fieldset>
 
-      <fieldset>
+      <fieldset id="wantBox">
         <legend><span id="wantLegend" data-i18n="trades.want"></span> <span class="pick-count" id="wantCount"></span></legend>
         <div class="items" id="wantItems"></div>
         <input type="search" class="pick-search" id="wantSearch" data-i18n-placeholder="trades.pick" data-i18n-aria="trades.pick">
@@ -200,9 +200,12 @@
 
   const form = document.getElementById("form");
   const kindOf = () => form.querySelector('input[name="kind"]:checked').value;
-  function updateKind() { // une recherche n'a pas de partie "J'offre"
+  // Échange : "J'offre" puis "Je veux". Recherche : "Je cherche" puis "En échange, je propose (facultatif)".
+  function updateKind() {
     const request = kindOf() === "request";
-    document.getElementById("haveBox").hidden = request;
+    const haveBox = document.getElementById("haveBox"), wantBox = document.getElementById("wantBox");
+    if (request) wantBox.after(haveBox); else wantBox.before(haveBox);
+    document.getElementById("haveLegend").textContent = t(request ? "trades.haveOptional" : "trades.have");
     document.getElementById("wantLegend").textContent = t(request ? "trades.wantSearch" : "trades.want");
   }
   form.querySelectorAll('input[name="kind"]').forEach((r) => (r.onchange = updateKind));
@@ -212,7 +215,7 @@
   form.onsubmit = async (e) => {
     e.preventDefault();
     const kind = kindOf();
-    const body = { kind, have: kind === "request" ? [] : sel.have, want: sel.want, note: document.getElementById("note").value, roblox: document.getElementById("roblox").value.trim() };
+    const body = { kind, have: sel.have, want: sel.want, note: document.getElementById("note").value, roblox: document.getElementById("roblox").value.trim() };
     const btn = document.getElementById("publish"); btn.disabled = true;
     try {
       const res = await fetch("/api/trades", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
@@ -282,8 +285,13 @@
         box.append(el("span", null, t(labelKey)), items);
         return box;
       };
-      if (tr.kind === "offer") card.appendChild(side("trades.offers", tr.have));
-      card.appendChild(side(tr.kind === "offer" ? "trades.wants" : "trades.wantSearch", tr.want));
+      if (tr.kind === "offer") {
+        card.appendChild(side("trades.offers", tr.have));
+        card.appendChild(side("trades.wants", tr.want));
+      } else { // recherche : ce qui est cherché, puis ce qui est proposé en échange ("À discuter" si rien)
+        card.appendChild(side("trades.wantSearch", tr.want));
+        card.appendChild(side("trades.inExchange", tr.have));
+      }
       if (tr.note) card.appendChild(el("p", "note", tr.note));
 
       const contact = el("div", "contact");
