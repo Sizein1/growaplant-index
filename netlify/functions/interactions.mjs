@@ -2,8 +2,11 @@
 //   gw:approve / gw:reject  -> validation d'un giveaway (rôles modérateurs uniquement)
 //   gw:done                 -> "Échange effectué" : la capture du salon part dans le salon des preuves
 //   gw:close                -> ferme le salon de remise
+//   tr:cancel               -> trade annulé : salon fermé, l'annonce redevient disponible sur le site
+//   tr:done                 -> trade terminé : salon fermé, annonce supprimée
 // Chaque requête est signée par Discord (Ed25519) : on la vérifie avec DISCORD_PUBLIC_KEY.
 import { createPublicKey, verify } from "node:crypto";
+import { getStore } from "@netlify/blobs";
 import { isModerator, itemNames, lastImage, sendImage, sendMessage, deleteChannel } from "../lib/discord.mjs";
 import { GW, getGiveaway, saveGiveaway, validationMessage, announce } from "../lib/giveaways.mjs";
 
@@ -34,11 +37,12 @@ export default async (req) => {
   if (interaction.type !== 3) return json({ type: 4, data: { content: "?", flags: 64 } });
 
   const [scope, action, id] = (interaction.data?.custom_id || "").split(":");
-  if (scope !== "gw") return ephemeral("Bouton inconnu.");
   const member = interaction.member || {};
   const clicker = member.user || interaction.user || {};
   const mod = isModerator(member.roles || []);
   const origin = new URL(req.url).origin;
+  if (scope === "tr") return tradeButton(action, id, clicker, mod);
+  if (scope !== "gw") return ephemeral("Bouton inconnu.");
 
   const gw = await getGiveaway(id);
   if (!gw) return ephemeral("Ce giveaway n'existe plus. / This giveaway no longer exists.");
@@ -97,5 +101,30 @@ export default async (req) => {
 
   return ephemeral("Action inconnue.");
 };
+
+// --- Boutons du salon d'un trade accepté (auteur, joueur qui a accepté, ou modérateur) ---
+const DAY_MS = 24 * 3600 * 1000;
+async function tradeButton(action, id, clicker, mod) {
+  const store = getStore({ name: "trades", consistency: "strong" });
+  const key = `trade/${id}`;
+  const found = await store.getWithMetadata(key, { type: "json" });
+  const trade = found?.data;
+  if (!trade) return ephemeral("Ce trade n'existe plus. / This trade no longer exists.");
+  if (!mod && clicker.id !== trade.author.id && clicker.id !== trade.acceptedBy?.id) return ephemeral("Bouton réservé aux deux joueurs du trade. / Trade members only.");
+  if (trade.status !== "in_progress") return ephemeral("Déjà traité. / Already handled.");
+  if (action !== "cancel" && action !== "done") return ephemeral("Action inconnue.");
+
+  // Salon supprimé d'abord : si Discord échoue, rien n'a changé et on peut recliquer
+  if (!(await deleteChannel(trade.channelId))) return ephemeral("❌ Impossible de fermer le salon, réessaie. / Could not close the channel, try again.");
+  if (action === "done") {
+    await store.delete(key);
+  } else {
+    // L'annonce revient telle qu'avant l'acceptation, avec au moins un jour devant elle
+    const { acceptedBy, channelId, acceptedAt, channelDeleteAt, openExpiresAt, ...listing } = trade;
+    await store.setJSON(key, { ...listing, status: "open", expiresAt: Math.max(openExpiresAt || 0, Date.now() + DAY_MS) }, { onlyIfMatch: found.etag });
+  }
+  await store.delete(`lock/${id}`); // l'annonce peut être acceptée à nouveau
+  return json({ type: 6 }); // le salon n'existe plus : simple accusé de réception
+}
 
 export const config = { path: "/api/discord/interactions" };

@@ -130,8 +130,14 @@ export async function createTradeChannel(trade, accepter, origin, deleteAt) {
   await sendMessage(channel.id, {
     content: `🤝 <@${trade.author.id}> <@${accepter.id}>\n**${accepter.name}** a accepté le trade de **${trade.author.name}** ! / accepted the trade!\n` +
       `Mettez-vous d'accord ici, puis faites l'échange dans le jeu. / Agree here, then trade in game.\n` +
+      `↩️ **Annuler** : l'annonce revient sur le site. / **Cancel**: the listing goes back on the site.\n` +
+      `✅ **Trade terminé** : l'annonce est supprimée et ce salon fermé. / **Trade done**: the listing is removed and this channel closed.\n` +
       `⏳ Ce salon sera supprimé <t:${ts}:R>. / This channel will be deleted <t:${ts}:R>.`,
     embeds: [{ title: "Trade", color: 0x38b84c, fields }],
+    components: [{ type: 1, components: [ // boutons gérés par functions/interactions.mjs
+      { type: 2, style: 2, label: "Annuler / Cancel", emoji: { name: "↩️" }, custom_id: `tr:cancel:${trade.id}` },
+      { type: 2, style: 3, label: "Trade terminé / Trade done", emoji: { name: "✅" }, custom_id: `tr:done:${trade.id}` },
+    ] }],
     allowed_mentions: { users: [trade.author.id, accepter.id] },
   });
   return channel;

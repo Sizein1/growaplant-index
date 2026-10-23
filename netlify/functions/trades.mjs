@@ -82,6 +82,7 @@ export default async (req) => {
     const done = {
       ...claim, status: "in_progress", channelId: channel.id, acceptedAt: Date.now(),
       channelDeleteAt: deleteAt, expiresAt: Math.max(trade.expiresAt, deleteAt),
+      openExpiresAt: trade.expiresAt, // fin d'origine de l'annonce, si le trade est annulé depuis Discord
     };
     await store.setJSON(key, done);
     return json({ trade: done, channelUrl: channelUrl(channel.id) });
