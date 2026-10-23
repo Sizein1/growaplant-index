@@ -254,3 +254,11 @@ footer { padding: 0 0 28px; font-size: 13px; --stroke: 1.5px; }
 .pick-tile:disabled { opacity: .35; cursor: not-allowed; }
 .pick-tile:focus-visible { outline: 3px solid #ffd43b; outline-offset: 2px; }
 .pick-tile[hidden] { display: none; }
+
+/* Trades : compte Discord, bouton Accepter, trades en cours */
+.account { margin: 12px 0 0; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 15px; }
+.account a:not(.btn), .form-msg a, .card-msg a { color: #ffe46b; font-weight: 700; }
+.btn.discord { background: #5865f2; text-decoration: none; display: inline-flex; align-items: center; }
+.trade .row { gap: 8px; }
+.trade.taken { border-color: #555a68; }
+.trade .status { margin: 0; font-weight: 700; color: #ffb020; }

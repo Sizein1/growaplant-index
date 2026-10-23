@@ -24,10 +24,15 @@
   </nav>
 
   <p class="safety" data-i18n="trades.safety"></p>
+  <div class="account" id="account" aria-live="polite"></div>
 
   <details class="post" id="post">
     <summary class="outline" data-i18n="trades.new">➕ Publier une annonce</summary>
-    <form class="form" id="form" novalidate>
+    <div class="form" id="loginPrompt" hidden>
+      <p class="duos-hint" data-i18n="trades.loginToPost"></p>
+      <div class="row"><a class="btn discord" href="/api/auth/login" data-i18n="trades.login"></a></div>
+    </div>
+    <form class="form" id="form" novalidate hidden>
       <fieldset>
         <legend data-i18n="trades.kind"></legend>
         <div class="kinds">
@@ -52,7 +57,6 @@
 
       <label><span data-i18n="trades.note"></span><textarea id="note" maxlength="300"></textarea></label>
       <label><span data-i18n="trades.roblox"></span><input type="text" id="roblox" maxlength="20" autocomplete="username" required></label>
-      <label><span data-i18n="trades.discord"></span><input type="text" id="discord" maxlength="32"></label>
       <div class="row"><button class="btn green" type="submit" id="publish" data-i18n="trades.publish"></button></div>
       <p class="form-msg" id="formMsg" role="status" aria-live="polite"></p>
     </form>
@@ -85,25 +89,51 @@
   };
   // Les plus rares d'abord
   const pets = (window.PETS || []).slice().sort((a, b) => RARITY_ORDER.indexOf(b.rarity) - RARITY_ORDER.indexOf(a.rarity) || a.name.localeCompare(b.name));
-
-  // Catalogue des objets échangeables (seulement des pets) : "pet:Id" -> nom, image, rareté
-  const ITEMS = new Map();
-  for (const p of pets) ITEMS.set(`pet:${p.id}`, { name: p.name, img: `images/pets/${p.id}.jpg`, sub: p.rarity });
+  const ITEMS = new Map(pets.map((p) => [`pet:${p.id}`, { name: p.name, img: `images/pets/${p.id}.jpg`, sub: p.rarity }]));
   const MAX_ITEMS = 8;
 
-  // Annonces publiées depuis ce navigateur : id -> jeton de suppression
-  const loadMine = () => { try { return JSON.parse(localStorage.getItem("myTrades") || "{}"); } catch (e) { return {}; } };
-  const saveMine = (mine) => { try { localStorage.setItem("myTrades", JSON.stringify(mine)); } catch (e) { /* ignoré */ } };
+  let me = null;      // compte Discord connecté
+  let invite = "";    // lien d'invitation du serveur Discord (si configuré)
+  const acceptedNow = {}; // tradeId -> lien du salon, juste après une acceptation
+
   let adminKey = ""; try { adminKey = localStorage.getItem("tradesAdminKey") || ""; } catch (e) { /* ignoré */ }
   if (location.hash === "#admin") { // mode admin : demande la clé une fois, la garde dans ce navigateur
     const key = prompt(t("trades.adminPrompt"), adminKey);
     if (key !== null) { adminKey = key.trim(); try { localStorage.setItem("tradesAdminKey", adminKey); } catch (e) {} if (adminKey) alert(t("trades.admin")); }
   }
 
-  // ---------- Formulaire ----------
-  const sel = { have: [], want: [] };
+  const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
+  const errorText = (data) => {
+    const key = `trades.err.${data && data.error}`;
+    return t(I18N[LANG][key] ? key : "trades.err.network");
+  };
+  // Message d'erreur, avec le lien d'invitation quand il faut rejoindre le serveur
+  function errorNode(data) {
+    const box = el("span", null, errorText(data) + " ");
+    if (data && data.error === "not_member" && (data.invite || invite)) {
+      const a = el("a", null, t("trades.join")); a.href = data.invite || invite; a.target = "_blank"; a.rel = "noopener";
+      box.appendChild(a);
+    }
+    return box;
+  }
 
-  // Grille de pets cliquables (image + nom + rareté) : un clic sélectionne, un second retire
+  // ---------- Compte Discord ----------
+  function renderAccount() {
+    const box = document.getElementById("account");
+    if (me) {
+      const who = el("span", null, t("trades.loggedAs", { name: me.name }) + " · ");
+      const out = el("a", null, t("trades.logout")); out.href = "/api/auth/logout";
+      box.replaceChildren(who, out);
+    } else {
+      const a = el("a", "btn discord", t("trades.login")); a.href = "/api/auth/login";
+      box.replaceChildren(a);
+    }
+    document.getElementById("form").hidden = !me;
+    document.getElementById("loginPrompt").hidden = !!me;
+  }
+
+  // ---------- Formulaire : grille de pets cliquables ----------
+  const sel = { have: [], want: [] };
   function toggle(side, ref) {
     if (sel[side].includes(ref)) sel[side] = sel[side].filter((r) => r !== ref);
     else if (sel[side].length < MAX_ITEMS) sel[side].push(ref);
@@ -113,13 +143,11 @@
     const grid = document.getElementById(`${side}Grid`);
     grid.replaceChildren(...pets.map((p) => {
       const ref = `pet:${p.id}`;
-      const tile = document.createElement("button");
-      tile.type = "button"; tile.className = "pick-tile"; tile.dataset.ref = ref; tile.dataset.name = p.name.toLowerCase();
+      const tile = el("button", "pick-tile");
+      tile.type = "button"; tile.dataset.ref = ref; tile.dataset.name = p.name.toLowerCase();
       tile.style.setProperty("--c", RARITY_COLOR[p.rarity] || "#777");
-      tile.innerHTML = `<img loading="lazy" width="72" height="72" alt=""><span class="pick-name"></span><span class="pick-rk"></span>`;
-      tile.querySelector("img").src = `images/pets/${p.id}.jpg`;
-      tile.querySelector(".pick-name").textContent = p.name;
-      tile.querySelector(".pick-rk").textContent = p.rarity;
+      const img = el("img"); img.loading = "lazy"; img.width = 72; img.height = 72; img.alt = ""; img.src = `images/pets/${p.id}.jpg`;
+      tile.append(img, el("span", "pick-name", p.name), el("span", "pick-rk", p.rarity));
       tile.onclick = () => toggle(side, ref);
       return tile;
     }));
@@ -130,13 +158,12 @@
     };
   }
   function itemChip(ref, onRemove) {
-    const info = ITEMS.get(ref) || { name: ref, img: "", sub: "" };
-    const chip = document.createElement("span"); chip.className = "item";
-    const img = document.createElement("img"); img.src = info.img; img.alt = ""; img.loading = "lazy";
-    const name = document.createElement("span"); name.textContent = info.name;
-    chip.append(img, name);
+    const info = ITEMS.get(ref) || { name: ref.replace("pet:", ""), img: "" };
+    const chip = el("span", "item");
+    const img = el("img"); img.src = info.img; img.alt = ""; img.loading = "lazy";
+    chip.append(img, el("span", null, info.name));
     if (onRemove) {
-      const rm = document.createElement("button"); rm.type = "button"; rm.className = "rm"; rm.textContent = "✕";
+      const rm = el("button", "rm", "✕"); rm.type = "button";
       rm.setAttribute("aria-label", `${t("trades.delete")} ${info.name}`); rm.onclick = onRemove;
       chip.appendChild(rm);
     }
@@ -155,6 +182,7 @@
     }
   }
   buildGrid("have"); buildGrid("want");
+
   const form = document.getElementById("form");
   const kindOf = () => form.querySelector('input[name="kind"]:checked').value;
   function updateKind() { // une recherche n'a pas de partie "J'offre"
@@ -165,23 +193,17 @@
   form.querySelectorAll('input[name="kind"]').forEach((r) => (r.onchange = updateKind));
 
   const msg = document.getElementById("formMsg");
-  const showMsg = (text, ok) => { msg.textContent = text; msg.className = "form-msg " + (ok ? "ok" : "err"); };
+  const showMsg = (node, ok) => { msg.replaceChildren(typeof node === "string" ? document.createTextNode(node) : node); msg.className = "form-msg " + (ok ? "ok" : "err"); };
   form.onsubmit = async (e) => {
     e.preventDefault();
     const kind = kindOf();
-    const body = {
-      kind, have: kind === "request" ? [] : sel.have, want: sel.want,
-      note: document.getElementById("note").value, roblox: document.getElementById("roblox").value.trim(),
-      discord: document.getElementById("discord").value.trim(),
-    };
+    const body = { kind, have: kind === "request" ? [] : sel.have, want: sel.want, note: document.getElementById("note").value, roblox: document.getElementById("roblox").value.trim() };
     const btn = document.getElementById("publish"); btn.disabled = true;
     try {
       const res = await fetch("/api/trades", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
       const data = await res.json().catch(() => ({}));
-      const errKey = `trades.err.${data.error}`;
-      if (!res.ok) { showMsg(t(I18N[LANG][errKey] ? errKey : "trades.err.network"), false); return; }
-      const mine = loadMine(); mine[data.trade.id] = data.token; saveMine(mine);
-      try { localStorage.setItem("tradeContact", JSON.stringify({ roblox: body.roblox, discord: body.discord })); } catch (e) {}
+      if (!res.ok) { showMsg(errorNode(data), false); return; }
+      try { localStorage.setItem("tradeRoblox", body.roblox); } catch (e) {}
       sel.have = []; sel.want = []; renderSelection(); document.getElementById("note").value = "";
       showMsg(t("trades.published"), true);
       trades.unshift(data.trade); renderList();
@@ -189,10 +211,7 @@
       showMsg(t("trades.err.network"), false);
     } finally { btn.disabled = false; }
   };
-  try { // pré-remplit le contact utilisé la dernière fois
-    const c = JSON.parse(localStorage.getItem("tradeContact") || "{}");
-    document.getElementById("roblox").value = c.roblox || ""; document.getElementById("discord").value = c.discord || "";
-  } catch (e) {}
+  try { document.getElementById("roblox").value = localStorage.getItem("tradeRoblox") || ""; } catch (e) {}
 
   // ---------- Liste des annonces ----------
   let trades = [];
@@ -210,51 +229,78 @@
     return Math.abs(h) < 24 ? rtf.format(h, "hour") : rtf.format(Math.round(h / 24), "day");
   }
 
+  async function accept(tr, card) {
+    if (!confirm(t("trades.confirmAccept", { name: tr.author.name }))) return;
+    const res = await fetch(`/api/trades/accept?id=${encodeURIComponent(tr.id)}`, { method: "POST" }).catch(() => null);
+    const data = res ? await res.json().catch(() => ({})) : {};
+    if (res && res.ok) {
+      acceptedNow[tr.id] = data.channelUrl;
+      trades = trades.map((x) => (x.id === tr.id ? data.trade : x));
+      renderList();
+      return;
+    }
+    if (data.error === "already_taken") loadTrades(); // quelqu'un a été plus rapide : on rafraîchit
+    const err = card.querySelector(".card-msg") || card.appendChild(el("p", "form-msg err card-msg"));
+    err.replaceChildren(errorNode(data));
+  }
+
   function renderList() {
     const term = q.value.trim().toLowerCase();
-    const mine = loadMine();
     const shown = trades.filter((tr) => {
       if (kindFilter.value !== "all" && tr.kind !== kindFilter.value) return false;
       if (!term) return true;
       const names = [...tr.have, ...tr.want].map((r) => (ITEMS.get(r)?.name || r).toLowerCase());
-      return names.some((n) => n.includes(term)) || tr.roblox.toLowerCase().includes(term) || (tr.discord || "").toLowerCase().includes(term);
+      return names.some((n) => n.includes(term)) || tr.roblox.toLowerCase().includes(term) || tr.author.name.toLowerCase().includes(term);
     });
 
     list.replaceChildren(...shown.map((tr) => {
-      const card = document.createElement("article"); card.className = "trade";
-      const head = document.createElement("div"); head.className = "trade-head";
-      const kind = document.createElement("span"); kind.className = `kind ${tr.kind} outline`; kind.textContent = t(`trades.badge.${tr.kind}`);
-      const when = document.createElement("span"); when.className = "when"; when.textContent = ago(tr.createdAt);
-      head.append(kind, when); card.appendChild(head);
+      const card = el("article", "trade");
+      const head = el("div", "trade-head");
+      head.append(el("span", `kind ${tr.kind} outline`, t(`trades.badge.${tr.kind}`)), el("span", "when", ago(tr.createdAt)));
+      card.appendChild(head);
 
       const side = (labelKey, refs) => {
-        const box = document.createElement("div"); box.className = "side";
-        const label = document.createElement("span"); label.textContent = t(labelKey);
-        const items = document.createElement("div"); items.className = "items";
+        const box = el("div", "side");
+        const items = el("div", "items");
         if (refs.length) items.append(...refs.map((r) => itemChip(r)));
-        else { const any = document.createElement("span"); any.textContent = t("trades.anything"); items.appendChild(any); }
-        box.append(label, items); return box;
+        else items.appendChild(el("span", null, t("trades.anything")));
+        box.append(el("span", null, t(labelKey)), items);
+        return box;
       };
       if (tr.kind === "offer") card.appendChild(side("trades.offers", tr.have));
       card.appendChild(side(tr.kind === "offer" ? "trades.wants" : "trades.wantSearch", tr.want));
+      if (tr.note) card.appendChild(el("p", "note", tr.note));
 
-      if (tr.note) { const note = document.createElement("p"); note.className = "note"; note.textContent = tr.note; card.appendChild(note); }
-      const contact = document.createElement("div"); contact.className = "contact";
-      const rb = document.createElement("span"); rb.append("Roblox : "); const rbn = document.createElement("b"); rbn.textContent = tr.roblox; rb.appendChild(rbn);
-      contact.appendChild(rb);
-      if (tr.discord) { const dc = document.createElement("span"); dc.append("Discord : "); const dcn = document.createElement("b"); dcn.textContent = tr.discord; dc.appendChild(dcn); contact.appendChild(dc); }
+      const contact = el("div", "contact");
+      const dc = el("span", null, "Discord : "); dc.appendChild(el("b", null, tr.author.name));
+      const rb = el("span", null, "Roblox : "); rb.appendChild(el("b", null, tr.roblox));
+      contact.append(dc, rb);
       card.appendChild(contact);
 
-      const token = mine[tr.id] || adminKey;
-      if (token) {
-        const del = document.createElement("button"); del.type = "button"; del.className = "btn red"; del.textContent = t("trades.delete");
+      const mine = me && me.id === tr.author.id;
+      const participant = me && (mine || (tr.acceptedBy && tr.acceptedBy.id === me.id));
+      const actions = el("div", "row");
+      if (tr.status === "in_progress" || tr.status === "accepting") {
+        card.classList.add("taken");
+        card.appendChild(el("p", "status", t("trades.inProgress", { name: tr.acceptedBy ? tr.acceptedBy.name : "?" })));
+        const link = acceptedNow[tr.id] || (participant && window.GUILD_ID && tr.channelId ? `https://discord.com/channels/${window.GUILD_ID}/${tr.channelId}` : "");
+        if (acceptedNow[tr.id]) card.appendChild(el("p", "form-msg ok", t("trades.accepted")));
+        if (link) { const a = el("a", "btn discord", t("trades.openChannel")); a.href = link; a.target = "_blank"; a.rel = "noopener"; actions.appendChild(a); }
+      } else if (!mine) {
+        if (me) { const b = el("button", "btn green", t("trades.accept")); b.type = "button"; b.onclick = () => accept(tr, card); actions.appendChild(b); }
+        else { const a = el("a", "btn discord", t("trades.loginToAccept")); a.href = "/api/auth/login"; actions.appendChild(a); }
+      }
+      if (mine || adminKey) {
+        const del = el("button", "btn red", t("trades.delete")); del.type = "button";
         del.onclick = async () => {
           if (!confirm(t("trades.confirmDelete"))) return;
-          const res = await fetch(`/api/trades?id=${encodeURIComponent(tr.id)}`, { method: "DELETE", headers: { "x-trade-token": token } }).catch(() => null);
-          if (res && res.ok) { trades = trades.filter((x) => x.id !== tr.id); const m = loadMine(); delete m[tr.id]; saveMine(m); renderList(); }
+          const headers = adminKey && !mine ? { "x-admin-key": adminKey } : {};
+          const res = await fetch(`/api/trades?id=${encodeURIComponent(tr.id)}`, { method: "DELETE", headers }).catch(() => null);
+          if (res && res.ok) { trades = trades.filter((x) => x.id !== tr.id); renderList(); }
         };
-        card.appendChild(del);
+        actions.appendChild(del);
       }
+      if (actions.children.length) card.appendChild(actions);
       return card;
     }));
 
@@ -273,8 +319,18 @@
     renderList();
   }
 
-  window.onLangChange = () => { updateKind(); renderSelection(); renderList(); };
+  async function loadMe() {
+    try {
+      const data = await (await fetch("/api/auth/me", { cache: "no-store" })).json();
+      me = data.user; invite = data.invite || ""; window.GUILD_ID = data.guildId || "";
+    } catch (e) { me = null; }
+    renderAccount(); renderList();
+    if (new URLSearchParams(location.search).get("login") === "error") showMsg(t("trades.err.login"), false);
+  }
+
+  window.onLangChange = () => { updateKind(); renderSelection(); renderAccount(); renderList(); };
   window.onLangChange();
+  loadMe();
   loadTrades();
 </script>
 </body>
