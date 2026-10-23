@@ -26,7 +26,10 @@ async function listTrades(store) {
   const trades = [];
   for (const { key } of blobs) {
     const trade = await store.get(key, { type: "json" });
-    if (trade && trade.expiresAt > now) trades.push(trade); // les expirées sont effacées par cleanup-trades
+    if (!trade) continue;
+    // Annonces de l'ancienne version (sans compte Discord) : impossibles à accepter, on les efface
+    if (!trade.author) { await store.delete(key); continue; }
+    if (trade.expiresAt > now) trades.push(trade); // les expirées sont effacées par cleanup-trades
   }
   return trades.sort((a, b) => b.createdAt - a.createdAt);
 }
