@@ -12,7 +12,7 @@ const LIFETIME_MS = 7 * 24 * 3600 * 1000;      // une annonce ouverte dure 7 jou
 const CHANNEL_LIFETIME_MS = 3 * 24 * 3600 * 1000; // un salon de trade dure 3 jours
 const MAX_TRADES = 500;                         // plafond global, pour ne pas remplir le stockage
 const MAX_PER_HOUR = 3;                         // annonces par compte Discord et par heure
-const ITEM_RE = /^pet:[A-Za-z0-9_]{1,40}$/;     // seulement des pets : "pet:MossWolf"
+const ITEM_RE = /^(pet|egg):[A-Za-z0-9_]{1,40}$/; // pets et œufs : "pet:MossWolf", "egg:SolarEgg"
 const ROBLOX_RE = /^[A-Za-z0-9_]{3,20}$/;       // règles des pseudos Roblox
 const LINK_RE = /(https?:\/\/|www\.|discord\.gg|\.(com|net|gg|io|xyz|ru)\b)/i;
 

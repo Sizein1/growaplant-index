@@ -32,13 +32,17 @@ export async function isMember(userId) {
   return res.ok;
 }
 
-// Noms des pets pour le message du salon, lus dans pets-data.js du site
+// Noms des pets et des œufs pour le message du salon, lus dans pets-data.js et eggs-data.js du site
 async function petNames(origin) {
-  try {
-    const js = await (await fetch(`${origin}/pets-data.js`)).text();
-    const pets = JSON.parse(js.slice(js.indexOf("["), js.lastIndexOf("]") + 1));
-    return new Map(pets.map((p) => [`pet:${p.id}`, p.name]));
-  } catch { return new Map(); }
+  const names = new Map();
+  for (const [file, prefix, label] of [["pets-data.js", "pet", ""], ["eggs-data.js", "egg", "🥚 "]]) {
+    try {
+      const js = await (await fetch(`${origin}/${file}`)).text();
+      const list = JSON.parse(js.slice(js.indexOf("["), js.lastIndexOf("]") + 1));
+      for (const x of list) names.set(`${prefix}:${x.id}`, label + x.name);
+    } catch { /* fichier absent : on affichera l'identifiant */ }
+  }
+  return names;
 }
 
 const slug = (s) => String(s).toLowerCase().normalize("NFD").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 30) || "joueur";
@@ -69,7 +73,7 @@ export async function createTradeChannel(trade, accepter, origin, deleteAt) {
 
   // Message d'accueil : mentionne les deux joueurs, résume le trade (FR + EN)
   const names = await petNames(origin);
-  const list = (refs) => refs.length ? refs.map((r) => `• ${names.get(r) || r.replace("pet:", "")}`).join("\n") : "—";
+  const list = (refs) => refs.length ? refs.map((r) => `• ${names.get(r) || r.split(":")[1]}`).join("\n") : "—";
   const ts = Math.floor(deleteAt / 1000);
   const fields = [];
   if (trade.kind === "offer") fields.push({ name: `🎁 ${trade.author.name} offre / offers`, value: list(trade.have), inline: true });

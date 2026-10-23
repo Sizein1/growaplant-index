@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Trades</title>
-<meta name="description" content="Annonces de trade Grow a Plant : propose un échange de pets ou dis ce que tu recherches.">
+<meta name="description" content="Annonces de trade Grow a Plant : propose un échange de pets ou d’œufs, ou dis ce que tu recherches.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&display=swap" rel="stylesheet">
@@ -81,6 +81,7 @@
 
 <script src="i18n.js"></script>
 <script src="pets-data.js"></script>
+<script src="eggs-data.js"></script>
 <script>
   const RARITY_ORDER = ["Common", "Uncommon", "Rare", "Epic", "Legendary", "Mythic", "SECRET", "VOID", "EXCLUSIVE", "CELESTIAL"];
   const RARITY_COLOR = {
@@ -89,7 +90,12 @@
   };
   // Les plus rares d'abord
   const pets = (window.PETS || []).slice().sort((a, b) => RARITY_ORDER.indexOf(b.rarity) - RARITY_ORDER.indexOf(a.rarity) || a.name.localeCompare(b.name));
-  const ITEMS = new Map(pets.map((p) => [`pet:${p.id}`, { name: p.name, img: `images/pets/${p.id}.jpg`, sub: p.rarity }]));
+  const eggs = (window.EGGS || []).slice().sort((a, b) => RARITY_ORDER.indexOf(b.rarity) - RARITY_ORDER.indexOf(a.rarity) || a.name.localeCompare(b.name));
+  // Catalogue des objets échangeables : "pet:Id" et "egg:Id" -> nom, image, rareté
+  const ITEMS = new Map([
+    ...eggs.map((e) => [`egg:${e.id}`, { name: e.name, img: `images/eggs/${e.id}.jpg`, sub: e.rarity }]),
+    ...pets.map((p) => [`pet:${p.id}`, { name: p.name, img: `images/pets/${p.id}.jpg`, sub: p.rarity }]),
+  ]);
   const MAX_ITEMS = 8;
 
   let me = null;      // compte Discord connecté
@@ -141,16 +147,24 @@
   }
   function buildGrid(side) {
     const grid = document.getElementById(`${side}Grid`);
-    grid.replaceChildren(...pets.map((p) => {
-      const ref = `pet:${p.id}`;
+    const tileFor = (ref, info) => {
       const tile = el("button", "pick-tile");
-      tile.type = "button"; tile.dataset.ref = ref; tile.dataset.name = p.name.toLowerCase();
-      tile.style.setProperty("--c", RARITY_COLOR[p.rarity] || "#777");
-      const img = el("img"); img.loading = "lazy"; img.width = 72; img.height = 72; img.alt = ""; img.src = `images/pets/${p.id}.jpg`;
-      tile.append(img, el("span", "pick-name", p.name), el("span", "pick-rk", p.rarity));
+      tile.type = "button"; tile.dataset.ref = ref; tile.dataset.name = info.name.toLowerCase();
+      tile.style.setProperty("--c", RARITY_COLOR[info.sub] || "#777");
+      const img = el("img"); img.loading = "lazy"; img.width = 72; img.height = 72; img.alt = ""; img.src = info.img;
+      tile.append(img, el("span", "pick-name", info.name), el("span", "pick-rk", info.sub));
       tile.onclick = () => toggle(side, ref);
       return tile;
-    }));
+    };
+    // Œufs d'abord, puis les pets, chacun sous un petit titre
+    const nodes = [];
+    for (const [prefix, list, headKey] of [["egg", eggs, "trades.eggsHead"], ["pet", pets, "trades.petsHead"]]) {
+      if (!list.length) continue;
+      const head = el("div", "pick-head", t(headKey)); head.dataset.i18n = headKey; // traduit au changement de langue
+      nodes.push(head);
+      for (const x of list) nodes.push(tileFor(`${prefix}:${x.id}`, ITEMS.get(`${prefix}:${x.id}`)));
+    }
+    grid.replaceChildren(...nodes);
     const search = document.getElementById(`${side}Search`);
     search.oninput = () => {
       const term = search.value.trim().toLowerCase();
@@ -158,7 +172,7 @@
     };
   }
   function itemChip(ref, onRemove) {
-    const info = ITEMS.get(ref) || { name: ref.replace("pet:", ""), img: "" };
+    const info = ITEMS.get(ref) || { name: ref.split(":")[1], img: "" };
     const chip = el("span", "item");
     const img = el("img"); img.src = info.img; img.alt = ""; img.loading = "lazy";
     chip.append(img, el("span", null, info.name));
