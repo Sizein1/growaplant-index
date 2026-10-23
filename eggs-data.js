@@ -1,1 +1,1 @@
-window.EGGS = [];
+﻿window.EGGS = [{"id":"AbyssEgg","name":"Abyss Egg","rarity":"SECRET"},{"id":"SealedEyeEgg","name":"Sealed Eye Egg","rarity":"SECRET"},{"id":"SolarEgg","name":"Solar Egg","rarity":"Mythic"},{"id":"InfernoEgg","name":"Inferno Egg","rarity":"Mythic"}];
