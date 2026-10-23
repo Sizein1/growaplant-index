@@ -1,0 +1,9 @@
+{
+  "name": "growaplant-index",
+  "private": true,
+  "type": "module",
+  "description": "Index Grow a Plant : site statique + fonction Netlify pour les annonces de trade",
+  "dependencies": {
+    "@netlify/blobs": "^11.1.0"
+  }
+}

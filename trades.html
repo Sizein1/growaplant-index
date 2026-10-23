@@ -1,0 +1,260 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Trades</title>
+<meta name="description" content="Annonces de trade Grow a Plant : propose un échange de pets ou de gamepasses, ou dis ce que tu recherches.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body data-title="trades.title">
+<div class="wrap">
+  <header class="banner studs">
+    <h1 class="outline" data-i18n="trades.title">🤝 Trades</h1>
+    <p class="sub outline" data-i18n="trades.sub"></p>
+  </header>
+  <nav class="tabs" aria-label="Rubriques" data-i18n-aria="nav.label">
+    <a class="tab outline" href="./" data-i18n="nav.plants">🌱 Plantes</a>
+    <a class="tab outline" href="pets.html" data-i18n="nav.pets">🐾 Pets</a>
+    <a class="tab outline" href="trades.html" aria-current="page" data-i18n="nav.trades">🤝 Trades</a>
+    <button class="tab lang outline" type="button" id="lang" data-i18n="lang.switch">🇬🇧 English</button>
+  </nav>
+
+  <p class="safety" data-i18n="trades.safety"></p>
+
+  <details class="post" id="post">
+    <summary class="outline" data-i18n="trades.new">➕ Publier une annonce</summary>
+    <form class="form" id="form" novalidate>
+      <fieldset>
+        <legend data-i18n="trades.kind"></legend>
+        <div class="kinds">
+          <label><input type="radio" name="kind" value="offer" checked> <span data-i18n="trades.kind.offer"></span></label>
+          <label><input type="radio" name="kind" value="request"> <span data-i18n="trades.kind.request"></span></label>
+        </div>
+      </fieldset>
+
+      <fieldset id="haveBox">
+        <legend data-i18n="trades.have"></legend>
+        <div class="picker"><select id="havePick" data-i18n-aria="trades.have"></select><button class="btn" type="button" id="haveAdd" data-i18n="trades.add"></button></div>
+        <div class="items" id="haveItems"></div>
+      </fieldset>
+
+      <fieldset>
+        <legend id="wantLegend" data-i18n="trades.want"></legend>
+        <div class="picker"><select id="wantPick" data-i18n-aria="trades.want"></select><button class="btn" type="button" id="wantAdd" data-i18n="trades.add"></button></div>
+        <div class="items" id="wantItems"></div>
+      </fieldset>
+
+      <label><span data-i18n="trades.note"></span><textarea id="note" maxlength="300"></textarea></label>
+      <label><span data-i18n="trades.roblox"></span><input type="text" id="roblox" maxlength="20" autocomplete="username" required></label>
+      <label><span data-i18n="trades.discord"></span><input type="text" id="discord" maxlength="32"></label>
+      <div class="row"><button class="btn green" type="submit" id="publish" data-i18n="trades.publish"></button></div>
+      <p class="form-msg" id="formMsg" role="status" aria-live="polite"></p>
+    </form>
+  </details>
+
+  <div class="controls">
+    <div class="row">
+      <input type="search" id="q" data-i18n-placeholder="trades.search" data-i18n-aria="trades.search">
+      <select id="kindFilter" data-i18n-aria="trades.kind">
+        <option value="all" data-i18n="trades.filter.all"></option>
+        <option value="offer" data-i18n="trades.filter.offer"></option>
+        <option value="request" data-i18n="trades.filter.request"></option>
+      </select>
+    </div>
+    <div class="count" id="count"></div>
+  </div>
+
+  <main class="trade-list" id="list"></main>
+  <p class="empty outline" id="empty" hidden></p>
+  <footer class="outline" data-i18n="footer"></footer>
+</div>
+
+<script src="i18n.js"></script>
+<script src="pets-data.js"></script>
+<script src="gamepasses.js"></script>
+<script>
+  const RARITY_ORDER = ["Common", "Uncommon", "Rare", "Epic", "Legendary", "Mythic", "SECRET", "VOID", "EXCLUSIVE", "CELESTIAL"];
+  const pets = (window.PETS || []).slice().sort((a, b) => RARITY_ORDER.indexOf(b.rarity) - RARITY_ORDER.indexOf(a.rarity) || a.name.localeCompare(b.name));
+  const gamepasses = window.GAMEPASSES || [];
+
+  // Catalogue des objets échangeables : "pet:Id" / "gp:Id" -> nom et image
+  const ITEMS = new Map();
+  for (const p of pets) ITEMS.set(`pet:${p.id}`, { name: p.name, img: `images/pets/${p.id}.jpg`, sub: p.rarity });
+  for (const g of gamepasses) ITEMS.set(`gp:${g.id}`, { name: g.name, img: `images/gamepasses/${g.id}.jpg`, sub: "Gamepass" });
+
+  // Annonces publiées depuis ce navigateur : id -> jeton de suppression
+  const loadMine = () => { try { return JSON.parse(localStorage.getItem("myTrades") || "{}"); } catch (e) { return {}; } };
+  const saveMine = (mine) => { try { localStorage.setItem("myTrades", JSON.stringify(mine)); } catch (e) { /* ignoré */ } };
+  let adminKey = ""; try { adminKey = localStorage.getItem("tradesAdminKey") || ""; } catch (e) { /* ignoré */ }
+  if (location.hash === "#admin") { // mode admin : demande la clé une fois, la garde dans ce navigateur
+    const key = prompt(t("trades.adminPrompt"), adminKey);
+    if (key !== null) { adminKey = key.trim(); try { localStorage.setItem("tradesAdminKey", adminKey); } catch (e) {} if (adminKey) alert(t("trades.admin")); }
+  }
+
+  // ---------- Formulaire ----------
+  const sel = { have: [], want: [] };
+  function fillPicker(select) {
+    select.replaceChildren();
+    const first = new Option(t("trades.pick"), ""); first.disabled = true; first.selected = true;
+    select.appendChild(first);
+    for (const [label, prefix, list] of [[t("trades.pets"), "pet", pets], [t("trades.gamepasses"), "gp", gamepasses]]) {
+      if (!list.length) continue;
+      const group = document.createElement("optgroup"); group.label = label;
+      for (const x of list) group.appendChild(new Option(prefix === "pet" ? `${x.name} (${x.rarity})` : x.name, `${prefix}:${x.id}`));
+      select.appendChild(group);
+    }
+  }
+  function itemChip(ref, onRemove) {
+    const info = ITEMS.get(ref) || { name: ref, img: "", sub: "" };
+    const chip = document.createElement("span"); chip.className = "item";
+    const img = document.createElement("img"); img.src = info.img; img.alt = ""; img.loading = "lazy";
+    const name = document.createElement("span"); name.textContent = info.name;
+    chip.append(img, name);
+    if (onRemove) {
+      const rm = document.createElement("button"); rm.type = "button"; rm.className = "rm"; rm.textContent = "✕";
+      rm.setAttribute("aria-label", `${t("trades.delete")} ${info.name}`); rm.onclick = onRemove;
+      chip.appendChild(rm);
+    }
+    return chip;
+  }
+  function renderSelection() {
+    for (const side of ["have", "want"]) {
+      document.getElementById(`${side}Items`).replaceChildren(...sel[side].map((ref) => itemChip(ref, () => {
+        sel[side] = sel[side].filter((r) => r !== ref); renderSelection();
+      })));
+    }
+  }
+  for (const side of ["have", "want"]) {
+    document.getElementById(`${side}Add`).onclick = () => {
+      const ref = document.getElementById(`${side}Pick`).value;
+      if (ref && !sel[side].includes(ref) && sel[side].length < 8) { sel[side].push(ref); renderSelection(); }
+    };
+  }
+  const form = document.getElementById("form");
+  const kindOf = () => form.querySelector('input[name="kind"]:checked').value;
+  function updateKind() { // une recherche n'a pas de partie "J'offre"
+    const request = kindOf() === "request";
+    document.getElementById("haveBox").hidden = request;
+    document.getElementById("wantLegend").textContent = t(request ? "trades.wantSearch" : "trades.want");
+  }
+  form.querySelectorAll('input[name="kind"]').forEach((r) => (r.onchange = updateKind));
+
+  const msg = document.getElementById("formMsg");
+  const showMsg = (text, ok) => { msg.textContent = text; msg.className = "form-msg " + (ok ? "ok" : "err"); };
+  form.onsubmit = async (e) => {
+    e.preventDefault();
+    const kind = kindOf();
+    const body = {
+      kind, have: kind === "request" ? [] : sel.have, want: sel.want,
+      note: document.getElementById("note").value, roblox: document.getElementById("roblox").value.trim(),
+      discord: document.getElementById("discord").value.trim(),
+    };
+    const btn = document.getElementById("publish"); btn.disabled = true;
+    try {
+      const res = await fetch("/api/trades", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+      const data = await res.json().catch(() => ({}));
+      const errKey = `trades.err.${data.error}`;
+      if (!res.ok) { showMsg(t(I18N[LANG][errKey] ? errKey : "trades.err.network"), false); return; }
+      const mine = loadMine(); mine[data.trade.id] = data.token; saveMine(mine);
+      try { localStorage.setItem("tradeContact", JSON.stringify({ roblox: body.roblox, discord: body.discord })); } catch (e) {}
+      sel.have = []; sel.want = []; renderSelection(); document.getElementById("note").value = "";
+      showMsg(t("trades.published"), true);
+      trades.unshift(data.trade); renderList();
+    } catch (err) {
+      showMsg(t("trades.err.network"), false);
+    } finally { btn.disabled = false; }
+  };
+  try { // pré-remplit le contact utilisé la dernière fois
+    const c = JSON.parse(localStorage.getItem("tradeContact") || "{}");
+    document.getElementById("roblox").value = c.roblox || ""; document.getElementById("discord").value = c.discord || "";
+  } catch (e) {}
+
+  // ---------- Liste des annonces ----------
+  let trades = [];
+  let loadState = "loading";
+  const list = document.getElementById("list");
+  const q = document.getElementById("q");
+  const kindFilter = document.getElementById("kindFilter");
+  q.oninput = kindFilter.onchange = () => renderList();
+
+  function ago(ts) {
+    const rtf = new Intl.RelativeTimeFormat(LANG, { numeric: "auto" });
+    const min = Math.round((ts - Date.now()) / 60000);
+    if (Math.abs(min) < 60) return rtf.format(min, "minute");
+    const h = Math.round(min / 60);
+    return Math.abs(h) < 24 ? rtf.format(h, "hour") : rtf.format(Math.round(h / 24), "day");
+  }
+
+  function renderList() {
+    const term = q.value.trim().toLowerCase();
+    const mine = loadMine();
+    const shown = trades.filter((tr) => {
+      if (kindFilter.value !== "all" && tr.kind !== kindFilter.value) return false;
+      if (!term) return true;
+      const names = [...tr.have, ...tr.want].map((r) => (ITEMS.get(r)?.name || r).toLowerCase());
+      return names.some((n) => n.includes(term)) || tr.roblox.toLowerCase().includes(term) || (tr.discord || "").toLowerCase().includes(term);
+    });
+
+    list.replaceChildren(...shown.map((tr) => {
+      const card = document.createElement("article"); card.className = "trade";
+      const head = document.createElement("div"); head.className = "trade-head";
+      const kind = document.createElement("span"); kind.className = `kind ${tr.kind} outline`; kind.textContent = t(`trades.badge.${tr.kind}`);
+      const when = document.createElement("span"); when.className = "when"; when.textContent = ago(tr.createdAt);
+      head.append(kind, when); card.appendChild(head);
+
+      const side = (labelKey, refs) => {
+        const box = document.createElement("div"); box.className = "side";
+        const label = document.createElement("span"); label.textContent = t(labelKey);
+        const items = document.createElement("div"); items.className = "items";
+        if (refs.length) items.append(...refs.map((r) => itemChip(r)));
+        else { const any = document.createElement("span"); any.textContent = t("trades.anything"); items.appendChild(any); }
+        box.append(label, items); return box;
+      };
+      if (tr.kind === "offer") card.appendChild(side("trades.offers", tr.have));
+      card.appendChild(side(tr.kind === "offer" ? "trades.wants" : "trades.wantSearch", tr.want));
+
+      if (tr.note) { const note = document.createElement("p"); note.className = "note"; note.textContent = tr.note; card.appendChild(note); }
+      const contact = document.createElement("div"); contact.className = "contact";
+      const rb = document.createElement("span"); rb.append("Roblox : "); const rbn = document.createElement("b"); rbn.textContent = tr.roblox; rb.appendChild(rbn);
+      contact.appendChild(rb);
+      if (tr.discord) { const dc = document.createElement("span"); dc.append("Discord : "); const dcn = document.createElement("b"); dcn.textContent = tr.discord; dc.appendChild(dcn); contact.appendChild(dc); }
+      card.appendChild(contact);
+
+      const token = mine[tr.id] || adminKey;
+      if (token) {
+        const del = document.createElement("button"); del.type = "button"; del.className = "btn red"; del.textContent = t("trades.delete");
+        del.onclick = async () => {
+          if (!confirm(t("trades.confirmDelete"))) return;
+          const res = await fetch(`/api/trades?id=${encodeURIComponent(tr.id)}`, { method: "DELETE", headers: { "x-trade-token": token } }).catch(() => null);
+          if (res && res.ok) { trades = trades.filter((x) => x.id !== tr.id); const m = loadMine(); delete m[tr.id]; saveMine(m); renderList(); }
+        };
+        card.appendChild(del);
+      }
+      return card;
+    }));
+
+    document.getElementById("count").textContent = loadState === "ok" ? t("trades.count", { n: shown.length, s: shown.length > 1 ? "s" : "" }) : "";
+    const empty = document.getElementById("empty");
+    empty.hidden = shown.length > 0;
+    empty.textContent = loadState === "loading" ? t("trades.loading") : loadState === "error" ? t("trades.loadError") : t("trades.empty");
+  }
+
+  async function loadTrades() {
+    try {
+      const res = await fetch("/api/trades", { cache: "no-store" });
+      if (!res.ok) throw new Error(res.status);
+      trades = (await res.json()).trades || []; loadState = "ok";
+    } catch (e) { loadState = "error"; }
+    renderList();
+  }
+
+  window.onLangChange = () => { fillPicker(document.getElementById("havePick")); fillPicker(document.getElementById("wantPick")); updateKind(); renderSelection(); renderList(); };
+  window.onLangChange();
+  loadTrades();
+</script>
+</body>
+</html>
