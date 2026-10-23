@@ -83,6 +83,22 @@ export async function announce(gw, origin) {
   });
 }
 
+// Au tirage, l'annonce publique est modifiée (pas supprimée) : "Terminé" + gagnant, pour garder l'historique.
+// Une modification ne renotifie personne ; allowed_mentions vide par sécurité.
+async function markAnnouncementFinished(gw, names, winner, entries) {
+  if (!gw.announceMsg) return;
+  const result = winner
+    ? `🏆 Gagnant / Winner : <@${winner.id}> (${winner.name})`
+    : "😕 Aucun participant / No entries";
+  try {
+    await editMessage(GW.announce, gw.announceMsg, {
+      content: `✅ **Giveaway de ${gw.creator.name} terminé !** / Giveaway ended!\n${result}\n👥 ${entries} participant${entries > 1 ? "s" : ""}`,
+      embeds: [{ title: "🎁 Lots / Prizes", description: lots(names, gw), color: 0x6b7080 }],
+      allowed_mentions: { parse: [] },
+    });
+  } catch (err) { console.error("annonce non modifiée :", err); } // ne bloque pas le tirage
+}
+
 // Tirage : gagnant au hasard parmi les participants encore sur le serveur, puis salon de remise
 export async function draw(gw, origin) {
   const names = await itemNames(origin);
@@ -96,6 +112,7 @@ export async function draw(gw, origin) {
       content: `😕 Le giveaway de <@${gw.creator.id}> s'est terminé sans participant. / The giveaway ended with no entries.`,
       allowed_mentions: { users: [gw.creator.id] },
     });
+    await markAnnouncementFinished(gw, names, null, pool.length);
     return { ...gw, status: "no_participants", finishedAt: Date.now(), entries: pool.length };
   }
 
@@ -121,6 +138,7 @@ export async function draw(gw, origin) {
     content: `🎉 Félicitations <@${winner.id}> ! Tu as gagné le giveaway de <@${gw.creator.id}>. / Congratulations, you won!\n${lots(names, gw)}`,
     allowed_mentions: { users: [winner.id, gw.creator.id] },
   });
+  await markAnnouncementFinished(gw, names, winner, pool.length);
   return {
     ...gw, status: "drawn", finishedAt: Date.now(), entries: pool.length,
     winner: { id: winner.id, name: winner.name }, channelId: channel.id, channelDeleteAt: deleteAt,
