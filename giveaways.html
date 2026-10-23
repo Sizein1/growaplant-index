@@ -218,6 +218,20 @@
     } else if (gw.status === "no_participants") {
       c.appendChild(el("p", "status", t("gw.noEntries")));
     }
+    if (adminKey && gw.status === "active") { // mode admin : tirage immédiat (tests, ou fin anticipée)
+      const end = el("button", "btn", t("gw.endNow")); end.type = "button";
+      end.onclick = async () => {
+        if (!confirm(t("gw.confirmEnd"))) return;
+        end.disabled = true;
+        const res = await fetch(`/api/giveaways?action=end&id=${encodeURIComponent(gw.id)}`, { method: "POST", headers: { "x-admin-key": adminKey } }).catch(() => null);
+        const data = res ? await res.json().catch(() => ({})) : {};
+        if (res && res.ok) { load(); return; }
+        end.disabled = false;
+        const err = c.querySelector(".card-msg") || c.appendChild(el("p", "form-msg err card-msg"));
+        err.replaceChildren(errorNode(data));
+      };
+      actions.appendChild(end);
+    }
     if ((mine && gw.status === "pending") || adminKey) {
       const del = el("button", "btn red", t(mine && gw.status === "pending" ? "gw.cancel" : "trades.delete")); del.type = "button";
       del.onclick = async () => {

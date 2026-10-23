@@ -2,11 +2,12 @@
 //   GET    /api/giveaways              -> giveaways en cours et terminés récemment (+ les siens en attente / refusés)
 //   POST   /api/giveaways              -> proposer un giveaway (connecté Discord, membre du serveur) : part en validation
 //   POST   /api/giveaways/enter?id=... -> participer
+//   POST   /api/giveaways?action=end&id=... -> terminer tout de suite (clé admin)
 //   DELETE /api/giveaways?id=...       -> annuler le sien tant qu'il n'est pas validé (ou clé admin : n'importe lequel)
 import { randomUUID } from "node:crypto";
 import { getUser } from "../lib/session.mjs";
 import { isMember, deleteChannel, editMessage } from "../lib/discord.mjs";
-import { store, gwKey, entryPrefix, getGiveaway, saveGiveaway, postValidation, MAX_ITEMS, KEEP_FINISHED_MS, GW } from "../lib/giveaways.mjs";
+import { store, gwKey, entryPrefix, getGiveaway, saveGiveaway, postValidation, draw, MAX_ITEMS, KEEP_FINISHED_MS, GW } from "../lib/giveaways.mjs";
 
 const ITEM_RE = /^(pet|egg):[A-Za-z0-9_]{1,40}$/;
 const ROBLOX_RE = /^[A-Za-z0-9_]{3,20}$/;
@@ -39,6 +40,26 @@ export default async (req) => {
     }
     out.sort((a, b) => (a.status === "active" ? 0 : 1) - (b.status === "active" ? 0 : 1) || (a.endsAt || a.createdAt) - (b.endsAt || b.createdAt));
     return json({ giveaways: out });
+  }
+
+  // --- Terminer tout de suite (admin uniquement) : le tirage a lieu immédiatement ---
+  if (req.method === "POST" && url.searchParams.get("action") === "end") {
+    const adminKey = req.headers.get("x-admin-key") || "";
+    if (!process.env.ADMIN_KEY || adminKey !== process.env.ADMIN_KEY) return json({ error: "forbidden" }, 403);
+    const gw = await getGiveaway(url.searchParams.get("id") || "");
+    if (!gw) return json({ error: "not_found" }, 404);
+    if (gw.status !== "active") return json({ error: "not_active" }, 409);
+    const ending = { ...gw, endsAt: Date.now(), status: "drawing" }; // "drawing" : la tâche planifiée ne le tire pas en double
+    await saveGiveaway(ending);
+    try {
+      const done = await draw(ending, url.origin);
+      await saveGiveaway(done);
+      return json({ giveaway: publicView(done, done.entries ?? 0, false) });
+    } catch (err) {
+      console.error(err);
+      await saveGiveaway({ ...ending, status: "active" }); // la tâche planifiée retentera dans la minute
+      return json({ error: "discord_error" }, 502);
+    }
   }
 
   // --- Participer ---
