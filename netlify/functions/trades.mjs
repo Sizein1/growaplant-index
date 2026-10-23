@@ -6,7 +6,7 @@ import { createHash, randomBytes, randomUUID } from "node:crypto";
 const LIFETIME_MS = 7 * 24 * 3600 * 1000; // une annonce dure 7 jours
 const MAX_TRADES = 500;                   // plafond global, pour ne pas remplir le stockage
 const MAX_PER_HOUR = 3;                   // annonces par personne et par heure
-const ITEM_RE = /^(pet|gp):[A-Za-z0-9_]{1,40}$/;     // "pet:MossWolf", "gp:x2Money"
+const ITEM_RE = /^pet:[A-Za-z0-9_]{1,40}$/;          // seulement des pets : "pet:MossWolf"
 const ROBLOX_RE = /^[A-Za-z0-9_]{3,20}$/;              // règles des pseudos Roblox
 const LINK_RE = /(https?:\/\/|www\.|discord\.gg|\.(com|net|gg|io|xyz|ru)\b)/i;
 

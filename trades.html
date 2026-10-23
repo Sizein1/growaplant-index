@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Trades</title>
-<meta name="description" content="Annonces de trade Grow a Plant : propose un échange de pets ou de gamepasses, ou dis ce que tu recherches.">
+<meta name="description" content="Annonces de trade Grow a Plant : propose un échange de pets ou dis ce que tu recherches.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&display=swap" rel="stylesheet">
@@ -37,15 +37,17 @@
       </fieldset>
 
       <fieldset id="haveBox">
-        <legend data-i18n="trades.have"></legend>
-        <div class="picker"><select id="havePick" data-i18n-aria="trades.have"></select><button class="btn" type="button" id="haveAdd" data-i18n="trades.add"></button></div>
+        <legend><span data-i18n="trades.have"></span> <span class="pick-count" id="haveCount"></span></legend>
         <div class="items" id="haveItems"></div>
+        <input type="search" class="pick-search" id="haveSearch" data-i18n-placeholder="trades.pick" data-i18n-aria="trades.pick">
+        <div class="pick-grid" id="haveGrid" role="group" data-i18n-aria="trades.have"></div>
       </fieldset>
 
       <fieldset>
-        <legend id="wantLegend" data-i18n="trades.want"></legend>
-        <div class="picker"><select id="wantPick" data-i18n-aria="trades.want"></select><button class="btn" type="button" id="wantAdd" data-i18n="trades.add"></button></div>
+        <legend><span id="wantLegend" data-i18n="trades.want"></span> <span class="pick-count" id="wantCount"></span></legend>
         <div class="items" id="wantItems"></div>
+        <input type="search" class="pick-search" id="wantSearch" data-i18n-placeholder="trades.pick" data-i18n-aria="trades.pick">
+        <div class="pick-grid" id="wantGrid" role="group" data-i18n-aria="trades.want"></div>
       </fieldset>
 
       <label><span data-i18n="trades.note"></span><textarea id="note" maxlength="300"></textarea></label>
@@ -75,16 +77,19 @@
 
 <script src="i18n.js"></script>
 <script src="pets-data.js"></script>
-<script src="gamepasses.js"></script>
 <script>
   const RARITY_ORDER = ["Common", "Uncommon", "Rare", "Epic", "Legendary", "Mythic", "SECRET", "VOID", "EXCLUSIVE", "CELESTIAL"];
+  const RARITY_COLOR = {
+    Common: "#9aa0a8", Uncommon: "#38b84c", Rare: "#2f8ff0", Epic: "#a24df0", Legendary: "#f0b020",
+    Mythic: "#f0405f", SECRET: "#24252b", VOID: "#5b2fd6", EXCLUSIVE: "#ff7a1a", CELESTIAL: "#22b8cf",
+  };
+  // Les plus rares d'abord
   const pets = (window.PETS || []).slice().sort((a, b) => RARITY_ORDER.indexOf(b.rarity) - RARITY_ORDER.indexOf(a.rarity) || a.name.localeCompare(b.name));
-  const gamepasses = window.GAMEPASSES || [];
 
-  // Catalogue des objets échangeables : "pet:Id" / "gp:Id" -> nom et image
+  // Catalogue des objets échangeables (seulement des pets) : "pet:Id" -> nom, image, rareté
   const ITEMS = new Map();
   for (const p of pets) ITEMS.set(`pet:${p.id}`, { name: p.name, img: `images/pets/${p.id}.jpg`, sub: p.rarity });
-  for (const g of gamepasses) ITEMS.set(`gp:${g.id}`, { name: g.name, img: `images/gamepasses/${g.id}.jpg`, sub: "Gamepass" });
+  const MAX_ITEMS = 8;
 
   // Annonces publiées depuis ce navigateur : id -> jeton de suppression
   const loadMine = () => { try { return JSON.parse(localStorage.getItem("myTrades") || "{}"); } catch (e) { return {}; } };
@@ -97,16 +102,32 @@
 
   // ---------- Formulaire ----------
   const sel = { have: [], want: [] };
-  function fillPicker(select) {
-    select.replaceChildren();
-    const first = new Option(t("trades.pick"), ""); first.disabled = true; first.selected = true;
-    select.appendChild(first);
-    for (const [label, prefix, list] of [[t("trades.pets"), "pet", pets], [t("trades.gamepasses"), "gp", gamepasses]]) {
-      if (!list.length) continue;
-      const group = document.createElement("optgroup"); group.label = label;
-      for (const x of list) group.appendChild(new Option(prefix === "pet" ? `${x.name} (${x.rarity})` : x.name, `${prefix}:${x.id}`));
-      select.appendChild(group);
-    }
+
+  // Grille de pets cliquables (image + nom + rareté) : un clic sélectionne, un second retire
+  function toggle(side, ref) {
+    if (sel[side].includes(ref)) sel[side] = sel[side].filter((r) => r !== ref);
+    else if (sel[side].length < MAX_ITEMS) sel[side].push(ref);
+    renderSelection();
+  }
+  function buildGrid(side) {
+    const grid = document.getElementById(`${side}Grid`);
+    grid.replaceChildren(...pets.map((p) => {
+      const ref = `pet:${p.id}`;
+      const tile = document.createElement("button");
+      tile.type = "button"; tile.className = "pick-tile"; tile.dataset.ref = ref; tile.dataset.name = p.name.toLowerCase();
+      tile.style.setProperty("--c", RARITY_COLOR[p.rarity] || "#777");
+      tile.innerHTML = `<img loading="lazy" width="72" height="72" alt=""><span class="pick-name"></span><span class="pick-rk"></span>`;
+      tile.querySelector("img").src = `images/pets/${p.id}.jpg`;
+      tile.querySelector(".pick-name").textContent = p.name;
+      tile.querySelector(".pick-rk").textContent = p.rarity;
+      tile.onclick = () => toggle(side, ref);
+      return tile;
+    }));
+    const search = document.getElementById(`${side}Search`);
+    search.oninput = () => {
+      const term = search.value.trim().toLowerCase();
+      grid.querySelectorAll(".pick-tile").forEach((tile) => { tile.hidden = term && !tile.dataset.name.includes(term); });
+    };
   }
   function itemChip(ref, onRemove) {
     const info = ITEMS.get(ref) || { name: ref, img: "", sub: "" };
@@ -123,17 +144,17 @@
   }
   function renderSelection() {
     for (const side of ["have", "want"]) {
-      document.getElementById(`${side}Items`).replaceChildren(...sel[side].map((ref) => itemChip(ref, () => {
-        sel[side] = sel[side].filter((r) => r !== ref); renderSelection();
-      })));
+      document.getElementById(`${side}Items`).replaceChildren(...sel[side].map((ref) => itemChip(ref, () => toggle(side, ref))));
+      document.getElementById(`${side}Count`).textContent = `${sel[side].length}/${MAX_ITEMS}`;
+      const full = sel[side].length >= MAX_ITEMS;
+      document.querySelectorAll(`#${side}Grid .pick-tile`).forEach((tile) => {
+        const on = sel[side].includes(tile.dataset.ref);
+        tile.setAttribute("aria-pressed", String(on));
+        tile.disabled = full && !on; // plus de place : seuls les pets déjà choisis restent cliquables
+      });
     }
   }
-  for (const side of ["have", "want"]) {
-    document.getElementById(`${side}Add`).onclick = () => {
-      const ref = document.getElementById(`${side}Pick`).value;
-      if (ref && !sel[side].includes(ref) && sel[side].length < 8) { sel[side].push(ref); renderSelection(); }
-    };
-  }
+  buildGrid("have"); buildGrid("want");
   const form = document.getElementById("form");
   const kindOf = () => form.querySelector('input[name="kind"]:checked').value;
   function updateKind() { // une recherche n'a pas de partie "J'offre"
@@ -252,7 +273,7 @@
     renderList();
   }
 
-  window.onLangChange = () => { fillPicker(document.getElementById("havePick")); fillPicker(document.getElementById("wantPick")); updateKind(); renderSelection(); renderList(); };
+  window.onLangChange = () => { updateKind(); renderSelection(); renderList(); };
   window.onLangChange();
   loadTrades();
 </script>
