@@ -71,8 +71,13 @@ export default async (req) => {
   if (!involved) return ephemeral("Ce bouton est réservé au créateur et au gagnant. / Creator and winner only.");
 
   // --- "Échange effectué" : on récupère la capture et on l'envoie dans le salon des preuves ---
+  // Bouton "Fermer le salon" : envoyé dans un NOUVEAU message, pas dans la réponse au clic, car copier
+  // la preuve prend souvent plus de 3 s et Discord ignore alors la réponse (le bouton n'apparaissait pas).
+  const closeRow = [{ type: 1, components: [{ type: 2, style: 4, label: "Fermer le salon / Close channel", emoji: { name: "🔒" }, custom_id: `gw:close:${gw.id}` }] }];
+
   if (action === "done") {
-    if (gw.proofSent) return ephemeral("La preuve a déjà été envoyée. / Proof already sent.");
+    // Déjà envoyée : on redonne le bouton (visible seulement par celui qui clique), utile si le message a été perdu
+    if (gw.proofSent) return json({ type: 4, data: { content: "La preuve a déjà été envoyée. / Proof already sent.", components: closeRow, flags: 64 } });
     const image = await lastImage(gw.channelId);
     if (!image) return ephemeral("📸 Envoie d'abord une capture d'écran de l'échange dans ce salon, puis reclique. / Post a screenshot first, then click again.");
     try {
@@ -85,9 +90,11 @@ export default async (req) => {
       return ephemeral("❌ L'envoi de la preuve a échoué, réessaie. / Sending the proof failed, try again.");
     }
     await saveGiveaway({ ...gw, proofSent: true, proofAt: Date.now() });
-    await sendMessage(gw.channelId, { content: "✅ Preuve envoyée dans le salon des preuves. Vous pouvez fermer ce salon. / Proof sent. You can close this channel." }).catch(console.error);
-    // Remplace le bouton "Échange effectué" par "Fermer le salon"
-    return json({ type: 7, data: { components: [{ type: 1, components: [{ type: 2, style: 4, label: "Fermer le salon / Close channel", emoji: { name: "🔒" }, custom_id: `gw:close:${gw.id}` }] }] } });
+    await sendMessage(gw.channelId, {
+      content: "✅ Preuve envoyée dans le salon des preuves. Vous pouvez fermer ce salon. / Proof sent. You can close this channel.",
+      components: closeRow,
+    }).catch(console.error);
+    return json({ type: 6 }); // accusé de réception (souvent trop tard pour Discord, sans conséquence)
   }
 
   // --- Fermeture du salon ---
